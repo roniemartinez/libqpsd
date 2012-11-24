@@ -7,19 +7,31 @@ PSD (Photoshop Document) Plugin for Qt/C++
 This project is based on the Photoshop File Format Specification found in http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/PhotoshopFileFormats.htm
 
 Compression:
+
 	Raw - Unsupported
+
 	RLE - SUPPORTED
+
 	Zip without Predicttion - Unsupported
+
 	Zip with Prediction - Unsupported
 	
 Color Mode
+
 	Bitmap - Unsupported
+
 	Grayscale - Unsupported
+
 	Indexed - Unsupported
+
 	RGB - SUPPORTED (8Bpp per channel only)
+
 	CMYK - Unsupported
+
 	Multichannel - Unsupported
+
 	Duotone - Unsupported
+
 	Lab - Unsupported
 	
 
