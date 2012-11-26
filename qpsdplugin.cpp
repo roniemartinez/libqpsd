@@ -172,6 +172,8 @@ bool qpsdHandler::read(QImage *image)
         case 8:
             switch(channels)
             {
+            case 1:
+                break;
             case 3:
                 quint8 red,green,blue;
                 QDataStream planar(decompressed);
@@ -222,8 +224,6 @@ bool qpsdHandler::read(QImage *image)
             break;
         case 16:
             break;
-        case 32:
-            break;
         }
         break;
     case 4: /*CMYK - UNIMPLEMENTED*/
@@ -236,17 +236,6 @@ bool qpsdHandler::read(QImage *image)
         break;
     }
 
-    /*
-    QImage result(width,height,QImage::Format_RGB32);
-    for(quint32 i=0;i<height;i++)
-    {
-        for(quint32 j=0;j<width;j++)
-        {
-            QRgb value;
-            value = qRgb(122, 163, 39); // 0xff7aa327
-            result.setPixel(j,i,value);
-        }
-    }*/
     return input.status() == QDataStream::Ok;
 }
 
