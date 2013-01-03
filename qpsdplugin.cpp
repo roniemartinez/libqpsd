@@ -155,7 +155,10 @@ bool qpsdHandler::read(QImage *image)
         break;
     }
 
-
+    int totalBytes = width * height;
+    if(decompressed.size() != 3 * totalBytes)
+        return false;
+        
     switch(colorMode)
     {
     case 0: /*BITMAP - UNIMPLEMENTED*/
@@ -175,49 +178,19 @@ bool qpsdHandler::read(QImage *image)
             case 1:
                 break;
             case 3:
-                quint8 red,green,blue;
-                QDataStream planar(decompressed);
-
-                int totalBytes = width*height; quint8 byte;
-                QByteArray channel1, channel2, channel3, data;
-                for(int j=0; j<3; j++)
-                {
-                    for(int i=0; i <totalBytes ; i++)
-                    {
-                        planar >> byte;
-                        switch(j)
-                        {
-                        case 0: channel1.append(byte);
-                            break;
-                        case 1: channel2.append(byte);
-                            break;
-                        case 2: channel3.append(byte);
-                            break;
-                        }
-
+                QImage result(width, height, QImage::Format_RGB32);
+                const char *data = decompressed.constData();
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p++ = qRgb(data[0], data[totalBytes], data[totalBytes + totalBytes]);
+                        ++data;
                     }
                 }
-                for( int i=0; i <totalBytes ; i++)
-                {
-                    data.append(channel1.at(i));
-                    data.append(channel2.at(i));
-                    data.append(channel3.at(i));
-                }
-                QDataStream imageData(data);
-                QImage result(width,height,QImage::Format_RGB32);
 
-                for(quint32 i=0;i < height;i++)
-                {
-                    for(quint32 j=0;j<width;j++)
-                    {
-                        QRgb value;
-                        imageData >> red >> green >> blue;
-                        value = qRgb(red, green, blue);
-                        result.setPixel(j,i,value);
-                    }
-                }
-                if (imageData.status() == QDataStream::Ok)
-                    *image = result;
+                *image = result;  
                 break;
             }
 
