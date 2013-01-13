@@ -12,7 +12,7 @@ Compression:
 
 	RLE - SUPPORTED
 
-	Zip without Predicttion - Unsupported
+	Zip without Prediction - Unsupported
 
 	Zip with Prediction - Unsupported
 	
