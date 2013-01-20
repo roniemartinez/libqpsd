@@ -22,6 +22,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 
 #include "qpsdplugin.h"
 #include <QRgb>
+#include <QColor>
 
 qpsdPlugn::qpsdPlugn(QObject *parent) :
     QImageIOPlugin(parent)
@@ -36,14 +37,14 @@ qpsdPlugn::~qpsdPlugn()
 
 QStringList qpsdPlugn::keys() const
 {
-    return QStringList() << "psd";//TO-DO: add PSB (Photoshop Big)
+    return QStringList() << "psd";//TODO: add PSB (Photoshop Big) support
 }
 
 QImageIOPlugin::Capabilities qpsdPlugn::capabilities(
     QIODevice *device, const QByteArray &format) const
 {
     if (format == "psd")
-        return Capabilities(CanRead);//TO-DO: add CanWrite
+        return Capabilities(CanRead);//TODO: add CanWrite support
     if (!(format.isEmpty() && device->isOpen()))
         return 0;
 
@@ -96,11 +97,10 @@ bool qpsdHandler::read(QImage *image)
     QDataStream input(device());
     quint32 signature, height, width, colorModeDataLength, imageResourcesLength, layerAndMaskInformationLength;
     quint16 version, channels, depth, colorMode, compression;
-    //reserved bytes should be 6-byte in size
-    //there are no standard 6-byte datatype
-    quint32 reserved1;  quint16 reserved2;
     input.setByteOrder(QDataStream::BigEndian);
-    input >> signature >> version >> reserved1 >>reserved2 >> channels >> height >> width >> depth >> colorMode;
+    input >> signature >> version ;
+    input.skipRawData(6);//reserved bytes should be 6-byte in size
+    input >> channels >> height >> width >> depth >> colorMode;
     input >> colorModeDataLength;
     input.skipRawData(colorModeDataLength);
     input >> imageResourcesLength;
@@ -156,7 +156,7 @@ bool qpsdHandler::read(QImage *image)
     }
 
     int totalBytes = width * height;
-    if(decompressed.size() != 3 * totalBytes)
+    if(decompressed.size() != channels * totalBytes) //used "channels" instead of only "3"
         return false;
         
     switch(colorMode)
@@ -199,7 +199,74 @@ bool qpsdHandler::read(QImage *image)
             break;
         }
         break;
-    case 4: /*CMYK - UNIMPLEMENTED*/
+    case 4: /*CMYK*/
+        switch(depth)
+        {
+        case 8:
+            switch(channels)
+            {
+            case 4:
+                //FIXME code wasn't optimized for speed
+                //designed only to properly decode data to image
+                //wanted to apply algorithm as yuezhao implemented
+                //but getting errors like "QColor::fromCmyk: CMYK parameters out of range"
+
+                QDataStream planar(decompressed);
+                planar.setByteOrder(QDataStream::BigEndian);
+                quint8 byte;
+
+                QByteArray channel1, channel2, channel3, channel4, data;
+                for(int j=0; j<4; j++)
+                {
+                    for(int i=0; i <totalBytes ; i++)
+                    {
+                        planar >> byte;
+                        switch(j)
+                        {
+                        case 0: channel1.append(byte);
+                            break;
+                        case 1: channel2.append(byte);
+                            break;
+                        case 2: channel3.append(byte);
+                            break;
+                        case 3: channel4.append(byte);
+                            break;
+                        }
+                    }
+                }
+
+                for( int i=0; i <totalBytes ; i++)
+                {
+                    data.append(channel1.at(i));
+                    data.append(channel2.at(i));
+                    data.append(channel3.at(i));
+                    data.append(channel4.at(i));
+                }
+
+                QDataStream imageData(data);
+                imageData.setByteOrder(QDataStream::BigEndian);
+                QImage result(width,height,QImage::Format_RGB32);
+
+                for(quint32 i=0;i < height;i++)
+                {
+                    for(quint32 j=0;j<width;j++)
+                    {
+                        QRgb value;
+                        quint8 cyan, magenta, yellow, key;
+                        imageData >> cyan >> magenta >> yellow >> key;
+                        /*seems like you need to subtract c,m,y,k from 255
+                         *else, color becomes inverted and light becomes dark/
+                         *dark becomes light
+                         **/
+                        QColor color = QColor::fromCmyk(255-cyan, 255-magenta,255-yellow, 255-key);
+                        value = color.rgb();
+                        result.setPixel(j,i,value);
+                    }
+                }
+                *image = result;
+                break;
+            }
+        }
         break;
     case 7: /*MULTICHANNEL - UNIMPLEMENTED*/
         break;
@@ -224,11 +291,10 @@ QVariant qpsdHandler::option(ImageOption option) const
         QDataStream input(bytes);
         quint32 signature, height, width;
         quint16 version, channels, depth, colorMode;
-        //reserved bytes should be 6-byte in size
-        //there are no standard 6-byte datatype
-        quint32 reserved1;  quint16 reserved2;
         input.setByteOrder(QDataStream::BigEndian);
-        input >> signature >> version >> reserved1 >>reserved2 >> channels >> height >> width >> depth >> colorMode;
+        input >> signature >> version ;
+        input.skipRawData(6);//reserved bytes should be 6-byte in size
+        input >> channels >> height >> width >> depth >> colorMode;
         if (input.status() == QDataStream::Ok && signature == 0x38425053 && version == 0x0001)
             return QSize(width, height);
     }

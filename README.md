@@ -26,7 +26,7 @@ Color Mode
 
 	RGB - SUPPORTED (8Bpp per channel only)
 
-	CMYK - Unsupported
+	CMYK - SUPPORTED
 
 	Multichannel - Unsupported
 
@@ -38,7 +38,11 @@ Color Mode
 *Support was based only on existing PSD files downloaded from the internet.
 
 CONTRIBUTE
+
 	If you have an existing PSD file with different color mode or compression. Feel free to send me
 	an email at ronmarti18@gmail.com
 	
-	If you want to fork this project, feel free to do so
+	If you want to contribute in the code, just fork the project and pull requests.
+	
+	Thanks to Yuezhao (huangezhao@gmail.com) for the RGB code optimization and for the psd file.
+	It is in CMYK - RLE format which made the new commit possible.
