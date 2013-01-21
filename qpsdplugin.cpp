@@ -206,61 +206,20 @@ bool qpsdHandler::read(QImage *image)
             switch(channels)
             {
             case 4:
-                //FIXME code wasn't optimized for speed
-                //designed only to properly decode data to image
-                //wanted to apply algorithm as yuezhao implemented
-                //but getting errors like "QColor::fromCmyk: CMYK parameters out of range"
-
-                QDataStream planar(decompressed);
-                planar.setByteOrder(QDataStream::BigEndian);
-                quint8 byte;
-
-                QByteArray channel1, channel2, channel3, channel4, data;
-                for(int j=0; j<4; j++)
-                {
-                    for(int i=0; i <totalBytes ; i++)
-                    {
-                        planar >> byte;
-                        switch(j)
-                        {
-                        case 0: channel1.append(byte);
-                            break;
-                        case 1: channel2.append(byte);
-                            break;
-                        case 2: channel3.append(byte);
-                            break;
-                        case 3: channel4.append(byte);
-                            break;
-                        }
-                    }
-                }
-
-                for( int i=0; i <totalBytes ; i++)
-                {
-                    data.append(channel1.at(i));
-                    data.append(channel2.at(i));
-                    data.append(channel3.at(i));
-                    data.append(channel4.at(i));
-                }
-
-                QDataStream imageData(data);
-                imageData.setByteOrder(QDataStream::BigEndian);
-                QImage result(width,height,QImage::Format_RGB32);
-
-                for(quint32 i=0;i < height;i++)
-                {
-                    for(quint32 j=0;j<width;j++)
-                    {
-                        QRgb value;
-                        quint8 cyan, magenta, yellow, key;
-                        imageData >> cyan >> magenta >> yellow >> key;
-                        /*seems like you need to subtract c,m,y,k from 255
-                         *else, color becomes inverted and light becomes dark/
-                         *dark becomes light
-                         **/
-                        QColor color = QColor::fromCmyk(255-cyan, 255-magenta,255-yellow, 255-key);
-                        value = color.rgb();
-                        result.setPixel(j,i,value);
+                QImage result(width, height, QImage::Format_RGB32);
+                const char *data = decompressed.constData();
+                QRgb  *p, *end;
+                quint8 cyan, magenta, yellow, key;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        cyan = data[0];
+                        magenta = data[totalBytes];
+                        yellow = data[totalBytes + totalBytes];
+                        key = data[totalBytes + totalBytes + totalBytes];
+                        *p++ = QColor::fromCmyk(255-cyan, 255-magenta,255-yellow, 255-key).rgb();
+                        ++data;
                     }
                 }
                 *image = result;
