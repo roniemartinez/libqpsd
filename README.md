@@ -42,7 +42,11 @@ CONTRIBUTE
 	If you have an existing PSD file with different color mode or compression. Feel free to send me
 	an email at ronmarti18@gmail.com
 	
-	If you want to contribute in the code, just fork the project and pull requests.
+	If you want to contribute to the code, just fork the project and pull requests.
 	
-	Thanks to Yuezhao (huangezhao@gmail.com) for the RGB code optimization and for the psd file.
-	It is in CMYK - RLE format which made the new commit possible.
+
+CONTRIBUTORS
+
+	Ronie Martinez aka Code ReaQtor (ronmarti18@gmail.com)
+	Yuezhao Huang (huangezhao@gmail.com)
+	
