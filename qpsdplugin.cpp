@@ -178,19 +178,40 @@ bool qpsdHandler::read(QImage *image)
             case 1:
                 break;
             case 3:
-                QImage result(width, height, QImage::Format_RGB32);
-                const char *data = decompressed.constData();
-                QRgb  *p, *end;
-                for (quint32 y = 0; y < height; ++y) {
-                    p = (QRgb *)result.scanLine(y);
-                    end = p + width;
-                    while (p < end) {
-                        *p++ = qRgb(data[0], data[totalBytes], data[totalBytes + totalBytes]);
-                        ++data;
+                {
+                    QImage result(width, height, QImage::Format_RGB32);
+                    const char *data = decompressed.constData();
+                    QRgb  *p, *end;
+                    for (quint32 y = 0; y < height; ++y) {
+                        p = (QRgb *)result.scanLine(y);
+                        end = p + width;
+                        while (p < end) {
+                            *p++ = qRgb(data[0], data[totalBytes], data[totalBytes + totalBytes]);
+                            ++data;
+                        }
                     }
-                }
 
-                *image = result;  
+                    *image = result; 
+                }
+                break;
+            case 4:
+                {
+                    QImage result(width, height, QImage::Format_ARGB32);
+                    const char *data = decompressed.constData();
+                    QRgb  *p, *end;
+                    for (quint32 y = 0; y < height; ++y) {
+                        p = (QRgb *)result.scanLine(y);
+                        end = p + width;
+                        while (p < end) {
+                            *p++ = qRgba(data[0], data[totalBytes],
+                                     data[totalBytes + totalBytes],
+                                     data[totalBytes + totalBytes + totalBytes]);
+                            ++data;
+                        }
+                    }
+
+                    *image = result;
+                }
                 break;
             }
 
