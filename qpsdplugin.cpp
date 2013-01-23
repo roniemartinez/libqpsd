@@ -97,12 +97,21 @@ bool qpsdHandler::read(QImage *image)
     QDataStream input(device());
     quint32 signature, height, width, colorModeDataLength, imageResourcesLength, layerAndMaskInformationLength;
     quint16 version, channels, depth, colorMode, compression;
+    QByteArray colorData;
     input.setByteOrder(QDataStream::BigEndian);
     input >> signature >> version ;
     input.skipRawData(6);//reserved bytes should be 6-byte in size
     input >> channels >> height >> width >> depth >> colorMode;
     input >> colorModeDataLength;
-    input.skipRawData(colorModeDataLength);
+    if(colorModeDataLength != 0)
+    {
+        quint8 byte;
+        for(quint32 i=0; i<colorModeDataLength; ++i)
+        {
+            input >> byte;
+            colorData.append(byte);
+        }
+    }
     input >> imageResourcesLength;
     input.skipRawData(imageResourcesLength);
     input >> layerAndMaskInformationLength;
@@ -163,9 +172,68 @@ bool qpsdHandler::read(QImage *image)
     {
     case 0: /*BITMAP - UNIMPLEMENTED*/
         break;
-    case 1: /*GRAYSCALE - UNIMPLEMENTED*/
+    case 1: /*GRAYSCALE - FOR TESTING*/
+        switch(depth)
+        {
+        case 8:
+            switch(channels)
+            {
+            case 1:
+                //TODO: verify code with other GRAYSCALE PSD files
+                //Though it is working! Isn't it odd?
+                //most guides from Qt threads says about QImage::Format_Indexed8
+                //but I guess it is not ideal
+                QImage result(width, height, QImage::Format_RGB32);
+                const char *data = decompressed.constData();
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p++ = qRgb(data[0], data[0],data[0]);
+                        ++data;
+                    }
+                }
+
+                *image = result;
+                break;
+            }
+        }
+
         break;
-    case 2: /*INDEXED - UNIMPLEMENTED*/
+    case 2: /*INDEXED - NOT WORKING PROPERLY*/
+        switch(depth)
+        {
+        case 8:
+            switch(channels)
+            {
+            case 1:
+                //FIXME: code doesn't work properly
+                //http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/PhotoshopFileFormats.htm#50577411_pgfId-1070626
+                QImage result(width, height, QImage::Format_Indexed8);
+                const char *data = decompressed.constData();
+                QDataStream colorTable(colorData);
+                quint8 y = 0;
+                while(!colorTable.atEnd())
+                {
+                    quint8 red, green, blue;
+                    colorTable >> red >> green >> blue;
+                    result.setColor(y, qRgb(red, green, blue)); ++y;
+                }
+
+                for(quint32 i=0; i < height; ++i)
+                {
+                    for(quint32 j=0; j < width; ++j)
+                    {
+                        quint8 index = data[0];
+                        result.setPixel(j,i,index);
+                        ++data;
+                    }
+                }
+                *image=result;
+                break;
+            }
+        }
         break;
     case 3: /*RGB*/
         switch(depth)
