@@ -183,14 +183,32 @@ bool qpsdHandler::read(QImage *image)
                 //Though it is working! Isn't it odd?
                 //most guides from Qt threads says about QImage::Format_Indexed8
                 //but I guess it is not ideal
-                QImage result(width, height, QImage::Format_RGB32);
+//                QImage result(width, height, QImage::Format_RGB32);
+//                const char *data = decompressed.constData();
+//                QRgb  *p, *end;
+//                for (quint32 y = 0; y < height; ++y) {
+//                    p = (QRgb *)result.scanLine(y);
+//                    end = p + width;
+//                    while (p < end) {
+//                        *p++ = qRgb(data[0], data[0],data[0]);
+//                        ++data;
+//                    }
+//                }
+
+                QImage result(width, height, QImage::Format_Indexed8);
+                int index = 0;
+                const int IndexCount = 256;
+                while(index < IndexCount){
+                    result.setColor(index, qRgb(index, index, index));
+                    ++index;
+                }
+
                 const char *data = decompressed.constData();
-                QRgb  *p, *end;
-                for (quint32 y = 0; y < height; ++y) {
-                    p = (QRgb *)result.scanLine(y);
-                    end = p + width;
-                    while (p < end) {
-                        *p++ = qRgb(data[0], data[0],data[0]);
+                for(quint32 i=0; i < height; ++i)
+                {
+                    for(quint32 j=0; j < width; ++j)
+                    {
+                        result.setPixel(j,i,(quint8)data[0]);
                         ++data;
                     }
                 }
@@ -201,32 +219,35 @@ bool qpsdHandler::read(QImage *image)
         }
 
         break;
-    case 2: /*INDEXED - NOT WORKING PROPERLY*/
+    case 2: /*INDEXED*/
         switch(depth)
         {
         case 8:
             switch(channels)
             {
             case 1:
-                //FIXME: code doesn't work properly
-                //http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/PhotoshopFileFormats.htm#50577411_pgfId-1070626
                 QImage result(width, height, QImage::Format_Indexed8);
-                const char *data = decompressed.constData();
-                QDataStream colorTable(colorData);
-                quint8 y = 0;
-                while(!colorTable.atEnd())
-                {
-                    quint8 red, green, blue;
-                    colorTable >> red >> green >> blue;
-                    result.setColor(y, qRgb(red, green, blue)); ++y;
+
+                const char *colorTable = colorData.constData();
+                int index = 0;
+                int indexCount = colorData.size() / 3;
+                Q_ASSERT(indexCount == 256);
+                while(index < indexCount){
+                    /*
+                     * reference https://github.com/OpenImageIO/oiio/blob/master/src/psd.imageio/psdinput.cpp
+                     * function bool PSDInput::indexed_to_rgb (char *dst)
+                     */
+                    result.setColor(index++,
+                                    qRgb(colorTable[0], colorTable[256], colorTable[512]));
+                    ++colorTable;
                 }
 
+                const char *data = decompressed.constData();
                 for(quint32 i=0; i < height; ++i)
                 {
                     for(quint32 j=0; j < width; ++j)
                     {
-                        quint8 index = data[0];
-                        result.setPixel(j,i,index);
+                        result.setPixel(j,i,(quint8)data[0]);
                         ++data;
                     }
                 }
