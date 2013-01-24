@@ -188,12 +188,14 @@ bool qpsdHandler::read(QImage *image)
     {
     case 0: /*BITMAP*/
         {
-            //FIXME: image loads to "result" properly but becomes different when
-            //it passes the operator =
-            QImage result((uchar*)decompressed.data(),width, height, QImage::Format_Mono);
-            //output produced is inverted - black becomes white, white becomes black
-            result.invertPixels();
-            *image = result;
+            QString head = QString("P4\n%1 %2\n").arg(width).arg(height);
+            QByteArray buffer(head.toAscii());
+            buffer.append(decompressed);
+            QImage result = QImage::fromData(buffer);
+            if(result.isNull())
+                return false;
+            else
+                *image = result;
         }
 
         break;
