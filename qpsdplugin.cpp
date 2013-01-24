@@ -51,8 +51,8 @@ QImageIOPlugin::Capabilities qpsdPlugn::capabilities(
     Capabilities cap;
     if (device->isReadable() && qpsdHandler::canRead(device))
         cap |= CanRead;
-   // if (device->isWritable())
-   //     cap |= CanWrite;
+    // if (device->isWritable())
+    //     cap |= CanWrite;
     return cap;
 }
 
@@ -120,6 +120,7 @@ bool qpsdHandler::read(QImage *image)
 
     if (input.status() != QDataStream::Ok || signature != 0x38425053 || version != 0x0001)
         return false;
+
     QByteArray decompressed;
     switch(compression)
     {
@@ -167,7 +168,7 @@ bool qpsdHandler::read(QImage *image)
     int totalBytes = width * height;
     if(decompressed.size() != channels * totalBytes) //used "channels" instead of only "3"
         return false;
-        
+
     switch(colorMode)
     {
     case 0: /*BITMAP - UNIMPLEMENTED*/
@@ -179,36 +180,18 @@ bool qpsdHandler::read(QImage *image)
             switch(channels)
             {
             case 1:
-                //TODO: verify code with other GRAYSCALE PSD files
-                //Though it is working! Isn't it odd?
-                //most guides from Qt threads says about QImage::Format_Indexed8
-                //but I guess it is not ideal
-//                QImage result(width, height, QImage::Format_RGB32);
-//                const char *data = decompressed.constData();
-//                QRgb  *p, *end;
-//                for (quint32 y = 0; y < height; ++y) {
-//                    p = (QRgb *)result.scanLine(y);
-//                    end = p + width;
-//                    while (p < end) {
-//                        *p++ = qRgb(data[0], data[0],data[0]);
-//                        ++data;
-//                    }
-//                }
-
                 QImage result(width, height, QImage::Format_Indexed8);
-                int index = 0;
                 const int IndexCount = 256;
-                while(index < IndexCount){
-                    result.setColor(index, qRgb(index, index, index));
-                    ++index;
+                for(int i = 0; i < IndexCount; ++i){
+                    result.setColor(i, qRgb(i, i, i));
                 }
 
-                const char *data = decompressed.constData();
+                quint8 *data = (quint8*)decompressed.constData();
                 for(quint32 i=0; i < height; ++i)
                 {
                     for(quint32 j=0; j < width; ++j)
                     {
-                        result.setPixel(j,i,(quint8)data[0]);
+                        result.setPixel(j,i, *data);
                         ++data;
                     }
                 }
@@ -227,27 +210,26 @@ bool qpsdHandler::read(QImage *image)
             {
             case 1:
                 QImage result(width, height, QImage::Format_Indexed8);
-
-                const char *colorTable = colorData.constData();
-                int index = 0;
                 int indexCount = colorData.size() / 3;
                 Q_ASSERT(indexCount == 256);
-                while(index < indexCount){
+                quint8 *red = (quint8*)colorData.constData();
+                quint8 *green = red + indexCount;
+                quint8 *blue = green + indexCount;
+                for(int i=0; i < indexCount; ++i){
                     /*
                      * reference https://github.com/OpenImageIO/oiio/blob/master/src/psd.imageio/psdinput.cpp
                      * function bool PSDInput::indexed_to_rgb (char *dst)
                      */
-                    result.setColor(index++,
-                                    qRgb(colorTable[0], colorTable[256], colorTable[512]));
-                    ++colorTable;
+                    result.setColor(i, qRgb(*red, *green, *blue));
+                    ++red; ++green; ++blue;
                 }
 
-                const char *data = decompressed.constData();
+                quint8 *data = (quint8*)decompressed.constData();
                 for(quint32 i=0; i < height; ++i)
                 {
                     for(quint32 j=0; j < width; ++j)
                     {
-                        result.setPixel(j,i,(quint8)data[0]);
+                        result.setPixel(j,i,*data);
                         ++data;
                     }
                 }
@@ -267,41 +249,47 @@ bool qpsdHandler::read(QImage *image)
             case 1:
                 break;
             case 3:
-                {
-                    QImage result(width, height, QImage::Format_RGB32);
-                    const char *data = decompressed.constData();
-                    QRgb  *p, *end;
-                    for (quint32 y = 0; y < height; ++y) {
-                        p = (QRgb *)result.scanLine(y);
-                        end = p + width;
-                        while (p < end) {
-                            *p++ = qRgb(data[0], data[totalBytes], data[totalBytes + totalBytes]);
-                            ++data;
-                        }
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *red = (quint8*)decompressed.constData();
+                quint8 *green = red + totalBytes;
+                quint8 *blue = green + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = qRgb(*red, *green, *blue);
+                        ++p; ++red; ++green; ++blue;
                     }
-
-                    *image = result; 
                 }
+
+                *image = result;
+            }
                 break;
             case 4:
-                {
-                    QImage result(width, height, QImage::Format_ARGB32);
-                    const char *data = decompressed.constData();
-                    QRgb  *p, *end;
-                    for (quint32 y = 0; y < height; ++y) {
-                        p = (QRgb *)result.scanLine(y);
-                        end = p + width;
-                        while (p < end) {
-                            *p++ = qRgba(data[0], data[totalBytes],
-                                     data[totalBytes + totalBytes],
-                                     data[totalBytes + totalBytes + totalBytes]);
-                            ++data;
-                        }
+            {
+                QImage result(width, height, QImage::Format_ARGB32);
+                quint8 *red = (quint8*)decompressed.constData();
+                quint8 *green = red + totalBytes;
+                quint8 *blue = green + totalBytes;
+                quint8 *alpha = blue + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = qRgba(*red, *green, *blue, *alpha);
+                        ++p; ++red; ++green; ++blue; ++alpha;
                     }
-
-                    *image = result;
                 }
+
+                *image = result;
+            }
                 break;
+            case 5:
+                qDebug("5 channels of rgb mode");
+                return false;
             }
 
             break;
@@ -316,23 +304,46 @@ bool qpsdHandler::read(QImage *image)
             switch(channels)
             {
             case 4:
+            {
                 QImage result(width, height, QImage::Format_RGB32);
-                const char *data = decompressed.constData();
+                quint8 *cyan = (quint8*)decompressed.constData();
+                quint8 *magenta = cyan + totalBytes;
+                quint8 *yellow = magenta + totalBytes;
+                quint8 *key = yellow + totalBytes;
                 QRgb  *p, *end;
-                quint8 cyan, magenta, yellow, key;
                 for (quint32 y = 0; y < height; ++y) {
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        cyan = data[0];
-                        magenta = data[totalBytes];
-                        yellow = data[totalBytes + totalBytes];
-                        key = data[totalBytes + totalBytes + totalBytes];
-                        *p++ = QColor::fromCmyk(255-cyan, 255-magenta,255-yellow, 255-key).rgb();
-                        ++data;
+                        *p = QColor::fromCmyk(255-*cyan, 255-*magenta,
+                                              255-*yellow, 255-*key).rgb();
+                        ++p; ++cyan; ++magenta; ++yellow; ++key;
                     }
                 }
                 *image = result;
+            }
+                break;
+            case 5:
+            {
+                QImage result(width, height, QImage::Format_ARGB32);
+                quint8 *alpha = (quint8*)decompressed.constData();
+                quint8 *cyan = alpha + totalBytes;
+                quint8 *magenta = cyan + totalBytes;
+                quint8 *yellow = magenta + totalBytes;
+                quint8 *key = yellow + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = QColor::fromCmyk(255-*cyan, 255-*magenta,
+                                              255-*yellow, 255-*key,
+                                              *alpha).rgba();
+                        ++p; ++alpha; ++cyan; ++magenta; ++yellow; ++key;
+                    }
+                }
+                *image = result;
+            }
                 break;
             }
         }
