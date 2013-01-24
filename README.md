@@ -20,11 +20,11 @@ Color Mode
 
 	Bitmap - Unsupported
 
-	Grayscale - Unsupported
+	Grayscale - SUPPORTED
 
-	Indexed - Unsupported
+	Indexed - SUPPORTED
 
-	RGB - SUPPORTED (8Bpp per channel only)
+	RGB - SUPPORTED
 
 	CMYK - SUPPORTED
 
@@ -35,7 +35,6 @@ Color Mode
 	Lab - Unsupported
 	
 
-*Support was based only on existing PSD files downloaded from the internet.
 
 CONTRIBUTE
 
