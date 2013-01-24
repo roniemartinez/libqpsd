@@ -18,7 +18,7 @@ Compression:
 	
 Color Mode
 
-	Bitmap - Unsupported
+	Bitmap - SUPPORTED
 
 	Grayscale - SUPPORTED
 
