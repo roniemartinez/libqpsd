@@ -166,12 +166,36 @@ bool qpsdHandler::read(QImage *image)
     }
 
     int totalBytes = width * height;
-    if(decompressed.size() != channels * totalBytes) //used "channels" instead of only "3"
-        return false;
+
+    //FIXME: find better alternative
+    switch(colorMode)
+    {
+    case 0: //for bitmap
+        if(decompressed.size() != (channels * totalBytes)/8)
+        {
+            return false;
+        }
+        break;
+    default: //for non-bitmap
+        if(decompressed.size() != channels * totalBytes)
+        {
+            return false;
+        }
+        break;
+    }
 
     switch(colorMode)
     {
-    case 0: /*BITMAP - UNIMPLEMENTED*/
+    case 0: /*BITMAP*/
+        {
+            //FIXME: image loads to "result" properly but becomes different when
+            //it passes the operator =
+            QImage result((uchar*)decompressed.data(),width, height, QImage::Format_Mono);
+            //output produced is inverted - black becomes white, white becomes black
+            result.invertPixels();
+            *image = result;
+        }
+
         break;
     case 1: /*GRAYSCALE - FOR TESTING*/
         switch(depth)
