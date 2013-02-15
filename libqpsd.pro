@@ -6,9 +6,17 @@
 
 QT       += core gui
 
-TARGET = qpsd
-TEMPLATE = lib
 CONFIG += plugin debug_and_release
+
+CONFIG(debug, debug|release) {
+    TARGET = qpsdd4
+}
+CONFIG(release, debug|release) {
+    TARGET = qpsd4
+}
+
+TEMPLATE = lib
+
 
 DESTDIR = $$[QT_INSTALL_PLUGINS]/imageformats
 

@@ -103,15 +103,14 @@ bool qpsdHandler::read(QImage *image)
     input.skipRawData(6);//reserved bytes should be 6-byte in size
     input >> channels >> height >> width >> depth >> colorMode;
     input >> colorModeDataLength;
-    if(colorModeDataLength != 0)
-    {
+    if (colorModeDataLength != 0) {
         quint8 byte;
-        for(quint32 i=0; i<colorModeDataLength; ++i)
-        {
+        for(quint32 i=0; i<colorModeDataLength; ++i) {
             input >> byte;
             colorData.append(byte);
         }
     }
+
     input >> imageResourcesLength;
     input.skipRawData(imageResourcesLength);
     input >> layerAndMaskInformationLength;
@@ -122,8 +121,7 @@ bool qpsdHandler::read(QImage *image)
         return false;
 
     QByteArray decompressed;
-    switch(compression)
-    {
+    switch (compression) {
     case 0: /*RAW IMAGE DATA - UNIMPLEMENTED*/
         break;
     case 1: /*RLE COMPRESSED DATA*/
@@ -135,24 +133,17 @@ bool qpsdHandler::read(QImage *image)
         decompressed.clear();
 
         /*Code based on PackBits implementation which is primarily used by Photoshop for RLE encoding/decoding*/
-        while(!input.atEnd())
-        {
+        while (!input.atEnd()) {
             input >> byte;
-            if(byte > 128)
-            {
+            if (byte > 128) {
                 count=256-byte;
                 input >>  byte;
-                for(quint8 i=0;i<=count;i++)
-                {
+                for (quint8 i=0; i<=count; ++i) {
                     decompressed.append(byte);
-
                 }
-            }
-            else if(byte < 128)
-            {
-                count=byte+1;
-                for(quint8 i=0;i<count;i++)
-                {
+            } else if (byte < 128) {
+                count = byte + 1;
+                for(quint8 i=0; i<count; ++i) {
                     input >> byte;
                     decompressed.append(byte);
                 }
@@ -168,31 +159,26 @@ bool qpsdHandler::read(QImage *image)
     int totalBytes = width * height;
 
     //FIXME: find better alternative
-    switch(colorMode)
-    {
+    switch (colorMode) {
     case 0: //for bitmap
-        if(decompressed.size() != (channels * totalBytes)/8)
-        {
+        if (decompressed.size() != (channels * totalBytes)/8)
             return false;
-        }
         break;
     default: //for non-bitmap
-        if(decompressed.size() != channels * totalBytes)
-        {
+        if (decompressed.size() != channels * totalBytes)
             return false;
-        }
+
         break;
     }
 
-    switch(colorMode)
-    {
+    switch (colorMode) {
     case 0: /*BITMAP*/
         {
             QString head = QString("P4\n%1 %2\n").arg(width).arg(height);
             QByteArray buffer(head.toAscii());
             buffer.append(decompressed);
             QImage result = QImage::fromData(buffer);
-            if(result.isNull())
+            if (result.isNull())
                 return false;
             else
                 *image = result;
@@ -200,23 +186,19 @@ bool qpsdHandler::read(QImage *image)
 
         break;
     case 1: /*GRAYSCALE - FOR TESTING*/
-        switch(depth)
-        {
+        switch (depth) {
         case 8:
-            switch(channels)
-            {
+            switch (channels) {
             case 1:
                 QImage result(width, height, QImage::Format_Indexed8);
                 const int IndexCount = 256;
-                for(int i = 0; i < IndexCount; ++i){
+                for (int i = 0; i < IndexCount; ++i){
                     result.setColor(i, qRgb(i, i, i));
                 }
 
                 quint8 *data = (quint8*)decompressed.constData();
-                for(quint32 i=0; i < height; ++i)
-                {
-                    for(quint32 j=0; j < width; ++j)
-                    {
+                for (quint32 i=0; i < height; ++i) {
+                    for (quint32 j=0; j < width; ++j) {
                         result.setPixel(j,i, *data);
                         ++data;
                     }
@@ -229,11 +211,9 @@ bool qpsdHandler::read(QImage *image)
 
         break;
     case 2: /*INDEXED*/
-        switch(depth)
-        {
+        switch (depth) {
         case 8:
-            switch(channels)
-            {
+            switch (channels) {
             case 1:
                 QImage result(width, height, QImage::Format_Indexed8);
                 int indexCount = colorData.size() / 3;
@@ -241,7 +221,7 @@ bool qpsdHandler::read(QImage *image)
                 quint8 *red = (quint8*)colorData.constData();
                 quint8 *green = red + indexCount;
                 quint8 *blue = green + indexCount;
-                for(int i=0; i < indexCount; ++i){
+                for (int i=0; i < indexCount; ++i) {
                     /*
                      * reference https://github.com/OpenImageIO/oiio/blob/master/src/psd.imageio/psdinput.cpp
                      * function bool PSDInput::indexed_to_rgb (char *dst)
@@ -251,10 +231,8 @@ bool qpsdHandler::read(QImage *image)
                 }
 
                 quint8 *data = (quint8*)decompressed.constData();
-                for(quint32 i=0; i < height; ++i)
-                {
-                    for(quint32 j=0; j < width; ++j)
-                    {
+                for (quint32 i=0; i < height; ++i) {
+                    for (quint32 j=0; j < width; ++j) {
                         result.setPixel(j,i,*data);
                         ++data;
                     }
@@ -265,13 +243,11 @@ bool qpsdHandler::read(QImage *image)
         }
         break;
     case 3: /*RGB*/
-        switch(depth)
-        {
+        switch (depth) {
         case 1:
             break;
         case 8:
-            switch(channels)
-            {
+            switch(channels) {
             case 1:
                 break;
             case 3:
@@ -324,11 +300,9 @@ bool qpsdHandler::read(QImage *image)
         }
         break;
     case 4: /*CMYK*/
-        switch(depth)
-        {
+        switch (depth) {
         case 8:
-            switch(channels)
-            {
+            switch (channels) {
             case 4:
             {
                 QImage result(width, height, QImage::Format_RGB32);
