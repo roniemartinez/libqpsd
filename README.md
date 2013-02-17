@@ -30,7 +30,7 @@ Color Mode
 
 	Multichannel - Unsupported
 
-	Duotone - Unsupported
+	Duotone - SUPPORTED
 
 	Lab - Unsupported
 	

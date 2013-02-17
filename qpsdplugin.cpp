@@ -185,7 +185,7 @@ bool qpsdHandler::read(QImage *image)
         }
 
         break;
-    case 1: /*GRAYSCALE - FOR TESTING*/
+    case 1: /*GRAYSCALE*/
         switch (depth) {
         case 8:
             switch (channels) {
@@ -350,7 +350,41 @@ bool qpsdHandler::read(QImage *image)
         break;
     case 7: /*MULTICHANNEL - UNIMPLEMENTED*/
         break;
-    case 8: /*DUOTONE - UNIMPLEMENTED*/
+    case 8: /*DUOTONE*/
+        switch (depth) {
+        case 8:
+            switch (channels) {
+            case 1:
+                /*
+                 *Duotone images: color data contains the duotone specification
+                 *(the format of which is not documented). Other applications that
+                 *read Photoshop files can treat a duotone image as a gray image,
+                 *and just preserve the contents of the duotone information when
+                 *reading and writing the file.
+                 *
+                 *TODO: find a way to actually get the duotone, tritone, and quadtone colors
+                 *Noticed the added "Curve" layer when using photoshop
+                 */
+                QImage result(width, height, QImage::Format_Indexed8);
+                const int IndexCount = 256;
+                for(int i = 0; i < IndexCount; ++i){
+                    result.setColor(i, qRgb(i, i, i));
+                }
+                quint8 *data = (quint8*)decompressed.constData();
+                for(quint32 i=0; i < height; ++i)
+                {
+                    for(quint32 j=0; j < width; ++j)
+                    {
+                        result.setPixel(j,i, *data);
+                        ++data;
+                    }
+                }
+                *image = result;
+                break;
+            }
+
+            break;
+        }
         break;
     case 9: /*LAB - UNIMPLEMENTED*/
         break;
