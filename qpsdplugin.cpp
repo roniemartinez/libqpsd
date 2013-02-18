@@ -23,6 +23,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 #include "qpsdplugin.h"
 #include <QRgb>
 #include <QColor>
+#include <qmath.h>
 
 qpsdPlugn::qpsdPlugn(QObject *parent) :
     QImageIOPlugin(parent)
@@ -349,6 +350,7 @@ bool qpsdHandler::read(QImage *image)
         }
         break;
     case 7: /*MULTICHANNEL - UNIMPLEMENTED*/
+        return 0;
         break;
     case 8: /*DUOTONE*/
         switch (depth) {
@@ -386,7 +388,87 @@ bool qpsdHandler::read(QImage *image)
             break;
         }
         break;
-    case 9: /*LAB - UNIMPLEMENTED*/
+    case 9: /*LAB - UNDER TESTING*/
+        switch (depth) {
+        case 8:
+            switch (channels) {
+            case 3:
+                //FIXME: something is wrong with the computation
+                //overflow?
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *L = (quint8*)decompressed.constData();
+                quint8 *a = L + totalBytes;
+                quint8 *b = a + totalBytes;
+
+                qreal var_X, var_Y, var_Z, var_R, var_G, var_B, X, Y, Z;
+                qreal red, green, blue;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        //coversion from Lab to xyz
+                        //http://www.easyrgb.com/index.php?X=MATH&H=08#text8
+                        var_Y = (*L + 16) / 116;
+                        var_X = *a / 500 + var_Y;
+                        var_Z = var_Y - *b / 200;
+                        if ( qPow(var_Y,3) > 0.008856 ) {
+                            var_Y =  qPow(var_Y, 3);
+                        } else {
+                            var_Y = ( var_Y - 16 / 116 ) / 7.787;
+                        }
+                        if (  qPow(var_X, 3) > 0.008856 ) {
+                            var_X =  qPow(var_X, 3);
+                        } else {
+                            var_X = ( var_X - 16 / 116 ) / 7.787;
+                        }
+                        if (  qPow(var_Z, 3) > 0.008856 ) {
+                            var_Z =  qPow(var_Z, 3);
+                        } else {
+                            var_Z = ( var_Z - 16 / 116 ) / 7.787;
+                        }
+                        X = 95.047 * var_X;
+                        Y = 100.000 * var_Y;
+                        Z = 108.883 * var_Z;
+
+                        //conversion from xyz to rgb
+                        //http://www.easyrgb.com/index.php?X=MATH&H=01#text1
+                        var_X = X / 100;        //X from 0 to  95.047      (Observer = 2°, Illuminant = D65)
+                        var_Y = Y / 100;        //Y from 0 to 100.000
+                        var_Z = Z / 100;        //Z from 0 to 108.883
+                        var_R = var_X *  3.2406 + var_Y * -1.5372 + var_Z * -0.4986;
+                        var_G = var_X * -0.9689 + var_Y *  1.8758 + var_Z *  0.0415;
+                        var_B = var_X *  0.0557 + var_Y * -0.2040 + var_Z *  1.0570;
+                        if (  var_R > 0.0031308) {
+                            var_R = 1.055 * ( qPow( var_R, 1 / 2.4) ) - 0.055;
+                        } else {
+                            var_R = 12.92 * (var_R);
+                        }
+                        if ( var_G > 0.0031308 ) {
+                            var_G = 1.055 * ( qPow(var_G, 1 / 2.4 ) ) - 0.055;
+                        } else {
+                            var_G = 12.92 * (var_G);
+                        }
+                        if ( var_B > 0.0031308 ) {
+                            var_B = 1.055 * ( qPow(var_B , 1 / 2.4 ) ) - 0.055;
+                        } else {
+                            var_B = 12.92 * (var_B);
+                        }
+
+                        red = var_R * 255;
+                        green = var_G * 255;
+                        blue = var_B * 255;
+
+                        *p = qRgb(red, green, blue);
+                        ++p; ++L; ++a; ++b;
+                    }
+
+                }
+                *image = result;
+                break;
+            }
+            break;
+        }
         break;
     }
 
