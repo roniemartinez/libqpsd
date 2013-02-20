@@ -23,7 +23,87 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 #include "qpsdplugin.h"
 #include <QRgb>
 #include <QColor>
-#include <qmath.h>
+#include <math.h>
+
+QRgb psd_axyz_to_color(quint8 alpha, qreal x, qreal y, qreal z)
+{
+    qreal var_x = x / 100.0;
+    qreal var_y = y / 100.0;
+    qreal var_z = z / 100.0;
+
+    qreal var_r = var_x * 3.2406 + var_y * -1.5372 + var_z * -0.4986;
+    qreal var_g = var_x * -0.9689 + var_y * 1.8758 + var_z * 0.0415;
+    qreal var_b = var_x * 0.0557 + var_y * -0.2040 + var_z * 1.0570;
+
+    int red, green, blue;
+
+    if ( var_r > 0.0031308 )
+        var_r = 1.055 *  pow(var_r, 1/2.4)  - 0.055;
+    else
+        var_r = 12.92 * var_r;
+
+    if ( var_g > 0.0031308 )
+        var_g = 1.055 *  pow(var_g, 1/2.4)  - 0.055;
+    else
+        var_g = 12.92 * var_g;
+
+    if ( var_b > 0.0031308 )
+        var_b = 1.055 *  pow(var_b, 1/2.4) - 0.055;
+    else
+        var_b = 12.92 * var_b;
+
+    red = var_r * 256.0;
+    green = var_g * 256.0;
+    blue = var_b * 256.0;
+
+    return qRgba(red, green, blue, alpha);
+}
+
+QRgb psd_xyz_to_color(qreal x, qreal y, qreal z)
+{
+    return psd_axyz_to_color(255, x, y, z);
+}
+
+QRgb psd_alab_to_color(quint8 alpha, qint32 lightness, qint32 a, qint32 b)
+{
+    // For the conversion we first convert values to XYZ and then to RGB
+    // ref_X = 95.047, ref_Y = 100.000, ref_Z = 108.883
+    qreal x, y, z;
+    const qreal ref_x = 95.047;
+    const qreal ref_y = 100.000;
+    const qreal ref_z = 108.883;
+
+    qreal var_y = ( lightness + 16.0 ) / 116.0;
+    qreal var_x = a / 500.0 + var_y;
+    qreal var_z = var_y - b / 200.0;
+
+    if ( pow(var_y, 3) > 0.008856 )
+        var_y = pow(var_y, 3);
+    else
+        var_y = ( var_y - 16 / 116 ) / 7.787;
+
+    if ( pow(var_x, 3) > 0.008856 )
+        var_x = pow(var_x, 3);
+    else
+        var_x = ( var_x - 16 / 116 ) / 7.787;
+
+    if ( pow(var_z, 3) > 0.008856 )
+        var_z = pow(var_z, 3);
+    else
+        var_z = ( var_z - 16 / 116 ) / 7.787;
+
+    x = ref_x * var_x;
+    y = ref_y * var_y;
+    z = ref_z * var_z;
+
+    return psd_axyz_to_color(alpha, x, y, z);
+}
+
+QRgb psd_lab_to_color(qint32 lightness, qint32 a, qint32 b)
+{
+    return psd_alab_to_color(255, lightness, a, b);
+}
+
 
 qpsdPlugn::qpsdPlugn(QObject *parent) :
     QImageIOPlugin(parent)
@@ -174,16 +254,16 @@ bool qpsdHandler::read(QImage *image)
 
     switch (colorMode) {
     case 0: /*BITMAP*/
-        {
-            QString head = QString("P4\n%1 %2\n").arg(width).arg(height);
-            QByteArray buffer(head.toAscii());
-            buffer.append(decompressed);
-            QImage result = QImage::fromData(buffer);
-            if (result.isNull())
-                return false;
-            else
-                *image = result;
-        }
+    {
+        QString head = QString("P4\n%1 %2\n").arg(width).arg(height);
+        QByteArray buffer(head.toAscii());
+        buffer.append(decompressed);
+        QImage result = QImage::fromData(buffer);
+        if (result.isNull())
+            return false;
+        else
+            *image = result;
+    }
 
         break;
     case 1: /*GRAYSCALE*/
@@ -393,87 +473,58 @@ bool qpsdHandler::read(QImage *image)
         case 8:
             switch (channels) {
             case 3:
-                //FIXME: something is wrong with the computation
-                //overflow?
+            {
                 QImage result(width, height, QImage::Format_RGB32);
-                quint8 *L = (quint8*)decompressed.constData();
-                quint8 *a = L + totalBytes;
+                quint8 *lightness = (quint8*)decompressed.constData();
+                quint8 *a = lightness + totalBytes;
                 quint8 *b = a + totalBytes;
 
-                qreal var_X, var_Y, var_Z, var_R, var_G, var_B, X, Y, Z;
-                qreal red, green, blue;
                 QRgb  *p, *end;
                 for (quint32 y = 0; y < height; ++y) {
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        //coversion from Lab to xyz
-                        //http://www.easyrgb.com/index.php?X=MATH&H=08#text8
-                        var_Y = (*L + 16) / 116;
-                        var_X = *a / 500 + var_Y;
-                        var_Z = var_Y - *b / 200;
-                        if ( qPow(var_Y,3) > 0.008856 ) {
-                            var_Y =  qPow(var_Y, 3);
-                        } else {
-                            var_Y = ( var_Y - 16 / 116 ) / 7.787;
-                        }
-                        if (  qPow(var_X, 3) > 0.008856 ) {
-                            var_X =  qPow(var_X, 3);
-                        } else {
-                            var_X = ( var_X - 16 / 116 ) / 7.787;
-                        }
-                        if (  qPow(var_Z, 3) > 0.008856 ) {
-                            var_Z =  qPow(var_Z, 3);
-                        } else {
-                            var_Z = ( var_Z - 16 / 116 ) / 7.787;
-                        }
-                        X = 95.047 * var_X;
-                        Y = 100.000 * var_Y;
-                        Z = 108.883 * var_Z;
-
-                        //conversion from xyz to rgb
-                        //http://www.easyrgb.com/index.php?X=MATH&H=01#text1
-                        var_X = X / 100;        //X from 0 to  95.047      (Observer = 2°, Illuminant = D65)
-                        var_Y = Y / 100;        //Y from 0 to 100.000
-                        var_Z = Z / 100;        //Z from 0 to 108.883
-                        var_R = var_X *  3.2406 + var_Y * -1.5372 + var_Z * -0.4986;
-                        var_G = var_X * -0.9689 + var_Y *  1.8758 + var_Z *  0.0415;
-                        var_B = var_X *  0.0557 + var_Y * -0.2040 + var_Z *  1.0570;
-                        if (  var_R > 0.0031308) {
-                            var_R = 1.055 * ( qPow( var_R, 1 / 2.4) ) - 0.055;
-                        } else {
-                            var_R = 12.92 * (var_R);
-                        }
-                        if ( var_G > 0.0031308 ) {
-                            var_G = 1.055 * ( qPow(var_G, 1 / 2.4 ) ) - 0.055;
-                        } else {
-                            var_G = 12.92 * (var_G);
-                        }
-                        if ( var_B > 0.0031308 ) {
-                            var_B = 1.055 * ( qPow(var_B , 1 / 2.4 ) ) - 0.055;
-                        } else {
-                            var_B = 12.92 * (var_B);
-                        }
-
-                        red = var_R * 255;
-                        green = var_G * 255;
-                        blue = var_B * 255;
-
-                        *p = qRgb(red, green, blue);
-                        ++p; ++L; ++a; ++b;
+                        *p = psd_lab_to_color(*lightness * 100 >> 8, *a - 128, *b - 128);
+                        ++p; ++lightness; ++a; ++b;
                     }
 
                 }
                 *image = result;
                 break;
             }
+            case 4:
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *alpha = (quint8*)decompressed.constData();
+                quint8 *lightness = alpha + totalBytes;
+                quint8 *a = lightness + totalBytes;
+                quint8 *b = a + totalBytes;
+
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = psd_alab_to_color(*alpha, *lightness * 100 >> 8, *a - 128, *b - 128);
+                        ++p; ++alpha; ++lightness; ++a; ++b;
+                    }
+
+                }
+                *image = result;
+                break;
+            }
+            }
             break;
+        case 16:
+            qDebug("depth is 16, unsupport mode");
+            return false;
         }
         break;
     }
 
     return input.status() == QDataStream::Ok;
 }
+
 
 bool qpsdHandler::supportsOption(ImageOption option) const
 {
