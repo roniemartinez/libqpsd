@@ -32,7 +32,7 @@ Color Mode
 
 	Duotone - SUPPORTED
 
-	Lab - Unsupported
+	Lab - SUPPORTED
 	
 
 
