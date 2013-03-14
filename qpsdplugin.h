@@ -1,6 +1,6 @@
 /*
-Copyright (c) 2012, Ronie Martinez
-ronmarti18@gmail.com
+Copyright (c) 2012-2013 Ronie Martinez (ronmarti18@gmail.com)
+Copyright (c) 2013 Yuezhao Huang (huangezhao@gmail.com)
 All rights reserved.
 
 This library is free software; you can redistribute it and/or
