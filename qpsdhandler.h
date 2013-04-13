@@ -20,27 +20,32 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 02110-1301  USA
 */
 
-#ifndef QPSDPLUGIN_H
-#define QPSDPLUGIN_H
+#ifndef QPSDHANDLER_H
+#define QPSDHANDLER_H
 
-#include <QImageIOPlugin>
+#include <QImageIOHandler>
+#include <QImage>
+#include <QColor>
+#include <QVariant>
+#include <math.h>
 
-
-class QPSDPlugin : public QImageIOPlugin
+class QPSDHandler : public QImageIOHandler
 {
-    Q_OBJECT
-#if QT_VERSION >= 0x050000
-    Q_PLUGIN_METADATA(IID "org.qt-project.Qt.QImageIOHandlerFactoryInterface" FILE "QPSD.json")
-#endif // QT_VERSION >= 0x050000
-    
 public:
-    QPSDPlugin(QObject *parent = 0);
-    ~QPSDPlugin();
-    QStringList keys() const;
-    Capabilities capabilities(QIODevice *device,
-                    const QByteArray &format) const;
-    QImageIOHandler *create(QIODevice *device,
-                               const QByteArray &format = QByteArray()) const;
+    QPSDHandler();
+    ~QPSDHandler();
+
+    bool canRead() const;
+    bool read(QImage *image);
+    //bool write(const QImage &image);
+
+    //QByteArray name() const;
+
+    static bool canRead(QIODevice *device);
+
+    QVariant option(ImageOption option) const;
+    //void setOption(ImageOption option, const QVariant &value);
+    bool supportsOption(ImageOption option) const;
 };
 
-#endif // QPSDPLUGIN_H
+#endif // QPSDHANDLER_H
