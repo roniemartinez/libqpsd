@@ -25,7 +25,8 @@ SOURCES += qpsdplugin.cpp \
 
 HEADERS += qpsdplugin.h \
     qpsdhandler.h
-OTHER_FILES += QPSD.json
+OTHER_FILES += \
+    QPsdPlugin.json
 
 unix:!symbian {
     maemo5 {

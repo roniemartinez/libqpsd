@@ -1,11 +1,17 @@
 libqpsd
 =======
 
-PSD (Photoshop Document) Plugin for Qt/C++
+PSD (Photoshop Document) & PSB (Photoshop Big) Plugin for Qt/C++ (Qt4/Qt5)
 
 
 This project is based on the Photoshop File Format Specification found in http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/PhotoshopFileFormats.htm
 
+Format:
+
+	PSD - SUPPORTED
+	
+	PSB - SUPPORTED (Partial/Testing)
+	
 Compression:
 
 	Raw - Unsupported
@@ -32,7 +38,7 @@ Color Mode
 
 	Duotone - SUPPORTED
 
-	Lab - SUPPORTED
+	Lab - SUPPORTED (minor bug on Lab to RGB computation exists)
 	
 
 
@@ -41,11 +47,14 @@ CONTRIBUTE
 	If you have an existing PSD file with different color mode or compression. Feel free to send me
 	an email at ronmarti18@gmail.com
 	
-	If you want to contribute to the code, just fork the project and pull requests.
+	If you want to contribute tso the code, just fork the project and pull requests.
 	
 
 CONTRIBUTORS
 
 	Ronie Martinez aka Code ReaQtor (ronmarti18@gmail.com)
 	Yuezhao Huang (huangezhao@gmail.com)
+	
+	username "asgohtals" (http://qt-project.org/member/136052) - contributed PSB files for testing: berlin-cmyk.psb, berlin-quadtone.psb & wall-small-Lab.psb
+
 	

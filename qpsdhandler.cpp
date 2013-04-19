@@ -21,6 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 
 #include "qpsdhandler.h"
+#include <QDebug>
 
 QRgb psd_axyz_to_color(quint8 alpha, qreal x, qreal y, qreal z)
 {
@@ -101,38 +102,116 @@ QRgb psd_lab_to_color(qint32 lightness, qint32 a, qint32 b)
     return psd_alab_to_color(255, lightness, a, b);
 }
 
-QPSDHandler::QPSDHandler()
+QPsdHandler::QPsdHandler()
 {
 }
 
-QPSDHandler::~QPSDHandler()
+QPsdHandler::~QPsdHandler()
 {
 }
 
-bool QPSDHandler::canRead() const
+bool QPsdHandler::canRead() const
 {
     if (canRead(device())) {
-        setFormat("psd");
+        // cannot use setFormat with canRead(QIODevice *device) since
+        // the method is "static"
+        QByteArray signatureAndVersion = device()->peek(6);
+        if (signatureAndVersion.startsWith("8BPS")) {
+            if (signatureAndVersion.endsWith("\x00\x01"))
+                setFormat("psd");
+            else if (signatureAndVersion.endsWith("\x00\x02"))
+                setFormat("psb");
+            else return false;
+        }
         return true;
     }
     return false;
 }
 
-bool QPSDHandler::canRead(QIODevice *device)
+bool QPsdHandler::canRead(QIODevice *device)
 {
-    return device->peek(4) == QByteArray("\x38\x42\x50\x53"); //8BPS
+    //FIXME: I think this code is dirty, need a better & optimized code
+    QByteArray signatureAndVersion = device->peek(6);
+    if (signatureAndVersion.startsWith("8BPS")) {
+        if (signatureAndVersion.endsWith("\x00\x01") ||
+                signatureAndVersion.endsWith("\x00\x02"))
+            return true;
+        else return false;
+    }
+    return false;
 }
 
-bool QPSDHandler::read(QImage *image)
+bool QPsdHandler::read(QImage *image)
 {
     QDataStream input(device());
-    quint32 signature, height, width, colorModeDataLength, imageResourcesLength, layerAndMaskInformationLength;
+    quint32 signature, height, width, colorModeDataLength, imageResourcesLength;
     quint16 version, channels, depth, colorMode, compression;
     QByteArray colorData;
+
     input.setByteOrder(QDataStream::BigEndian);
-    input >> signature >> version ;
-    input.skipRawData(6);//reserved bytes should be 6-byte in size
-    input >> channels >> height >> width >> depth >> colorMode;
+
+    /* checking for validity of the file/device are executed
+     * after reading EACH "important" info and NOT after reading
+     * ALL of them - I think this will save time and increase speed */
+    input >> signature;
+    if (signature != 0x38425053)
+        return false;
+
+    input >> version; //version should be 1(PSD) or 2(PSB)
+    switch (version) {
+    case 1:
+    case 2:
+        break;
+    default: return false;
+        break;
+    }
+
+    input.skipRawData(6); //reserved bytes should be 6-byte in size
+
+    input >> channels; //Supported range is 1 to 56
+    if (channels < 1 || channels > 56)
+        return false;
+
+    input >> height; //Supported range is 1 to 30,000. (**PSB** max of 300,000.)
+    if (version == 1 && (height > 30000 || height == 0))
+        return false;
+    if (version == 2 && (height > 300000 || height == 0))
+        return false;
+
+    input >> width; //Supported range is 1 to 30,000. (**PSB** max of 300,000.)
+    if (version == 1 && (width > 30000 || width == 0))
+        return false;
+    if (version == 2 && (width > 300000 || width == 0))
+        return false;
+
+    input >> depth; //Supported values are 1, 8, 16 and 32
+    switch (depth) {
+    case 1:
+    case 8:
+    case 16:
+    case 32:
+        break;
+    default: return false;
+        break;
+    }
+
+    /* The color mode of the file. Supported values are:
+     * Bitmap = 0; Grayscale = 1; Indexed = 2; RGB = 3; CMYK = 4;
+     * Multichannel = 7; Duotone = 8; Lab = 9 */
+    input >> colorMode;
+    switch (colorMode) {
+    case 1:
+    case 2:
+    case 3:
+    case 4:
+    case 7:
+    case 8:
+    case 9:
+        break;
+    default: return false;
+        break;
+    }
+
     input >> colorModeDataLength;
     if (colorModeDataLength != 0) {
         quint8 byte;
@@ -144,39 +223,58 @@ bool QPSDHandler::read(QImage *image)
 
     input >> imageResourcesLength;
     input.skipRawData(imageResourcesLength);
-    input >> layerAndMaskInformationLength;
-    input.skipRawData(layerAndMaskInformationLength);
+
+    /* The size of Layer and Mask Section is 4 bytes for PSD files
+     * and 8 bytes for PSB files */
+    if (format() == "psd") {
+        quint32 layerAndMaskInfoLength;
+        input >> layerAndMaskInfoLength;
+        input.skipRawData(layerAndMaskInfoLength);
+    } else if (format() == "psb") {
+        quint64 layerAndMaskInfoLength;
+        input >> layerAndMaskInfoLength;
+        input.skipRawData(layerAndMaskInfoLength);
+    }
+
     input >> compression;
 
-    if (input.status() != QDataStream::Ok || signature != 0x38425053 || version != 0x0001)
+    if (input.status() != QDataStream::Ok)
         return false;
 
-    QByteArray decompressed;
+    QByteArray imageData;
     switch (compression) {
     case 0: /*RAW IMAGE DATA - UNIMPLEMENTED*/
         break;
     case 1: /*RLE COMPRESSED DATA*/
         // The RLE-compressed data is proceeded by a 2-byte data count for each row in the data,
         // which we're going to just skip.
-        input.skipRawData(height*channels*2);
+        if (format() == "psd")
+            input.skipRawData(height*channels*2);
+        // This section was NOT documented, but because of too much use of
+        // qDebug() + caffeine, I solved it using the verification section
+        // after this switch statement :)
+        // Found out that the resulting image data was NOT of correct size
+        else if (format() == "psb")
+            input.skipRawData(height*channels*4);
 
         quint8 byte,count;
-        decompressed.clear();
+        imageData.clear();
 
-        /*Code based on PackBits implementation which is primarily used by Photoshop for RLE encoding/decoding*/
+        /* Code based on PackBits implementation which is primarily used by
+         * Photoshop for RLE encoding/decoding */
         while (!input.atEnd()) {
             input >> byte;
             if (byte > 128) {
                 count=256-byte;
                 input >>  byte;
                 for (quint8 i=0; i<=count; ++i) {
-                    decompressed.append(byte);
+                    imageData.append(byte);
                 }
             } else if (byte < 128) {
                 count = byte + 1;
                 for(quint8 i=0; i<count; ++i) {
                     input >> byte;
-                    decompressed.append(byte);
+                    imageData.append(byte);
                 }
             }
         }
@@ -187,18 +285,33 @@ bool QPSDHandler::read(QImage *image)
         break;
     }
 
+    if (input.status() != QDataStream::Ok)
+        return false;
+
     int totalBytes = width * height;
 
-    //FIXME: find better alternative
+    /*this section was made for verification*/
+    /*for developers use ONLY*/
+    /*
+    qDebug() << "color mode: " << colorMode
+             << "\ndepth: " << depth
+             << "\nchannels: " << channels
+             << "\ncompression: " << compression
+             << "\nwidth: " << width
+             << "\nheight: " << height
+             << "\ntotalBytes: " << totalBytes
+             << "\nimage data: " << imageData.size();
+    */
+
+    //FIXME: find better alternative for checking this
     switch (colorMode) {
     case 0: //for bitmap
-        if (decompressed.size() != (channels * totalBytes)/8)
+        if (imageData.size() != (channels * totalBytes)/8)
             return false;
         break;
     default: //for non-bitmap
-        if (decompressed.size() != channels * totalBytes)
+        if (imageData.size() != channels * totalBytes)
             return false;
-
         break;
     }
 
@@ -208,7 +321,7 @@ bool QPSDHandler::read(QImage *image)
         QString head = QString("P4\n%1 %2\n").arg(width).arg(height);
         //QByteArray buffer(head.toAscii());
         QByteArray buffer(head.toUtf8());
-        buffer.append(decompressed);
+        buffer.append(imageData);
         QImage result = QImage::fromData(buffer);
         if (result.isNull())
             return false;
@@ -228,7 +341,7 @@ bool QPSDHandler::read(QImage *image)
                     result.setColor(i, qRgb(i, i, i));
                 }
 
-                quint8 *data = (quint8*)decompressed.constData();
+                quint8 *data = (quint8*)imageData.constData();
                 for (quint32 i=0; i < height; ++i) {
                     for (quint32 j=0; j < width; ++j) {
                         result.setPixel(j,i, *data);
@@ -249,7 +362,7 @@ bool QPSDHandler::read(QImage *image)
             case 1:
                 QImage result(width, height, QImage::Format_Indexed8);
                 int indexCount = colorData.size() / 3;
-                Q_ASSERT(indexCount == 256);
+                //Q_ASSERT(indexCount == 256);
                 quint8 *red = (quint8*)colorData.constData();
                 quint8 *green = red + indexCount;
                 quint8 *blue = green + indexCount;
@@ -262,7 +375,7 @@ bool QPSDHandler::read(QImage *image)
                     ++red; ++green; ++blue;
                 }
 
-                quint8 *data = (quint8*)decompressed.constData();
+                quint8 *data = (quint8*)imageData.constData();
                 for (quint32 i=0; i < height; ++i) {
                     for (quint32 j=0; j < width; ++j) {
                         result.setPixel(j,i,*data);
@@ -276,7 +389,7 @@ bool QPSDHandler::read(QImage *image)
         break;
     case 3: /*RGB*/
         switch (depth) {
-        case 1:
+        case 1: return false;
             break;
         case 8:
             switch(channels) {
@@ -285,7 +398,7 @@ bool QPSDHandler::read(QImage *image)
             case 3:
             {
                 QImage result(width, height, QImage::Format_RGB32);
-                quint8 *red = (quint8*)decompressed.constData();
+                quint8 *red = (quint8*)imageData.constData();
                 quint8 *green = red + totalBytes;
                 quint8 *blue = green + totalBytes;
                 QRgb  *p, *end;
@@ -304,7 +417,7 @@ bool QPSDHandler::read(QImage *image)
             case 4:
             {
                 QImage result(width, height, QImage::Format_ARGB32);
-                quint8 *red = (quint8*)decompressed.constData();
+                quint8 *red = (quint8*)imageData.constData();
                 quint8 *green = red + totalBytes;
                 quint8 *blue = green + totalBytes;
                 quint8 *alpha = blue + totalBytes;
@@ -322,12 +435,10 @@ bool QPSDHandler::read(QImage *image)
             }
                 break;
             case 5:
-                qDebug("5 channels of rgb mode");
+                Q_ASSERT("UNSUPPORTED: 5 channels of rgb mode");
                 return false;
             }
 
-            break;
-        case 16:
             break;
         }
         break;
@@ -338,7 +449,7 @@ bool QPSDHandler::read(QImage *image)
             case 4:
             {
                 QImage result(width, height, QImage::Format_RGB32);
-                quint8 *cyan = (quint8*)decompressed.constData();
+                quint8 *cyan = (quint8*)imageData.constData();
                 quint8 *magenta = cyan + totalBytes;
                 quint8 *yellow = magenta + totalBytes;
                 quint8 *key = yellow + totalBytes;
@@ -358,7 +469,7 @@ bool QPSDHandler::read(QImage *image)
             case 5:
             {
                 QImage result(width, height, QImage::Format_ARGB32);
-                quint8 *alpha = (quint8*)decompressed.constData();
+                quint8 *alpha = (quint8*)imageData.constData();
                 quint8 *cyan = alpha + totalBytes;
                 quint8 *magenta = cyan + totalBytes;
                 quint8 *yellow = magenta + totalBytes;
@@ -403,7 +514,7 @@ bool QPSDHandler::read(QImage *image)
                 for(int i = 0; i < IndexCount; ++i){
                     result.setColor(i, qRgb(i, i, i));
                 }
-                quint8 *data = (quint8*)decompressed.constData();
+                quint8 *data = (quint8*)imageData.constData();
                 for(quint32 i=0; i < height; ++i)
                 {
                     for(quint32 j=0; j < width; ++j)
@@ -420,13 +531,15 @@ bool QPSDHandler::read(QImage *image)
         }
         break;
     case 9: /*LAB - UNDER TESTING*/
+        //FIXME: computation from Lab color mode to RGb has some minor bug
+        //which results to pixels different from the correct conversion
         switch (depth) {
         case 8:
             switch (channels) {
             case 3:
             {
                 QImage result(width, height, QImage::Format_RGB32);
-                quint8 *lightness = (quint8*)decompressed.constData();
+                quint8 *lightness = (quint8*)imageData.constData();
                 quint8 *a = lightness + totalBytes;
                 quint8 *b = a + totalBytes;
 
@@ -446,7 +559,7 @@ bool QPSDHandler::read(QImage *image)
             case 4:
             {
                 QImage result(width, height, QImage::Format_RGB32);
-                quint8 *alpha = (quint8*)decompressed.constData();
+                quint8 *alpha = (quint8*)imageData.constData();
                 quint8 *lightness = alpha + totalBytes;
                 quint8 *a = lightness + totalBytes;
                 quint8 *b = a + totalBytes;
@@ -466,9 +579,6 @@ bool QPSDHandler::read(QImage *image)
             }
             }
             break;
-        case 16:
-            qDebug("depth is 16, unsupported mode");
-            return false;
         }
         break;
     }
@@ -477,12 +587,12 @@ bool QPSDHandler::read(QImage *image)
 }
 
 
-bool QPSDHandler::supportsOption(ImageOption option) const
+bool QPsdHandler::supportsOption(ImageOption option) const
 {
     return option == Size;
 }
 
-QVariant QPSDHandler::option(ImageOption option) const
+QVariant QPsdHandler::option(ImageOption option) const
 {
     if (option == Size) {
         QByteArray bytes = device()->peek(26);
@@ -493,7 +603,8 @@ QVariant QPSDHandler::option(ImageOption option) const
         input >> signature >> version ;
         input.skipRawData(6);//reserved bytes should be 6-byte in size
         input >> channels >> height >> width >> depth >> colorMode;
-        if (input.status() == QDataStream::Ok && signature == 0x38425053 && version == 0x0001)
+        if (input.status() == QDataStream::Ok && signature == 0x38425053 &&
+                (version == 0x0001 || version == 0x0002))
             return QSize(width, height);
     }
     return QVariant();
