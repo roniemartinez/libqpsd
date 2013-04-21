@@ -22,56 +22,84 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 
 #include "qpsdhandler.h"
 #include <QDebug>
+#include <QFile>
 
-QRgb psd_axyz_to_color(quint8 alpha, qreal x, qreal y, qreal z)
+// tristimulus: ref_X = 95.047, ref_Y = 100.000, ref_Z = 108.883
+const qreal ref_x = 95.047;
+const qreal ref_y = 100.000;
+const qreal ref_z = 108.883;
+
+QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
 {
     qreal var_x = x / 100.0;
     qreal var_y = y / 100.0;
     qreal var_z = z / 100.0;
 
-    qreal var_r = var_x * 3.2406 + var_y * -1.5372 + var_z * -0.4986;
-    qreal var_g = var_x * -0.9689 + var_y * 1.8758 + var_z * 0.0415;
-    qreal var_b = var_x * 0.0557 + var_y * -0.2040 + var_z * 1.0570;
+    /* From "Color Conversion Algorithms"
+     * http://www.cs.rit.edu/~ncs/color/t_convert.html
+    [ R ]   [  3.240479 -1.537150 -0.498535 ]   [ X ]
+    [ G ] = [ -0.969256  1.875992  0.041556 ] * [ Y ]
+    [ B ]   [  0.055648 -0.204043  1.057311 ]   [ Z ]
+    */
 
-    int red, green, blue;
+    qreal var_r = (var_x * 3.240479) + (var_y * -1.537150) + (var_z * -0.498535);
+    qreal var_g = (var_x * -0.969256) + (var_y * 1.875992) + (var_z * 0.041556);
+    qreal var_b = (var_x * 0.055648) + (var_y * -0.204043) + (var_z * 1.057311);
 
-    if ( var_r > 0.0031308 )
-        var_r = 1.055 *  pow(var_r, 1/2.4)  - 0.055;
+    if ( var_r > 0.0031308)
+        var_r = (1.055 * pow(var_r, 1/2.4)) - 0.055;
     else
         var_r = 12.92 * var_r;
 
-    if ( var_g > 0.0031308 )
-        var_g = 1.055 *  pow(var_g, 1/2.4)  - 0.055;
+    if ( var_g > 0.0031308)
+        var_g = (1.055 * pow(var_g, 1/2.4)) - 0.055;
     else
         var_g = 12.92 * var_g;
 
-    if ( var_b > 0.0031308 )
-        var_b = 1.055 *  pow(var_b, 1/2.4) - 0.055;
+    if ( var_b > 0.0031308)
+        var_b = (1.055 * pow(var_b, 1/2.4)) - 0.055;
     else
         var_b = 12.92 * var_b;
 
-    red = var_r * 256.0;
-    green = var_g * 256.0;
-    blue = var_b * 256.0;
+    int red, green, blue;
 
+    red = var_r * 255.0;
+    green = var_g * 255.0;
+    blue = var_b * 255.0;
+
+    //FIXME: there is a bug: red/green/blue sometimes fall outside the range 0-255
+    //bug minimized but not totally solved and color is somewhat different
+    //from what photoshop renders
+    red = (red < 0)?0:((red > 255)?2:red);
+    green = (green < 0)?0:((green > 255)?2:green);
+    blue = (blue < 0)?0:((blue > 255)?2:blue);
+
+    //FIXME: I used photoshop to check if the image is viewed correctly
+    //and found out that it is transparent at value = 255 so I assumed
+    //they inverted it but there are still differences, the algorithm is
+    //very closed and there might some kind of computation they used for
+    //the alpha and I cannot find any documentation on it
+    alpha = 255 - alpha;
     return qRgba(red, green, blue, alpha);
 }
 
-QRgb psd_xyz_to_color(qreal x, qreal y, qreal z)
+QRgb psd_xyz_to_rgb(qreal x, qreal y, qreal z)
 {
-    return psd_axyz_to_color(255, x, y, z);
+    return psd_axyz_to_rgba(255, x, y, z);
 }
 
-QRgb psd_alab_to_color(quint8 alpha, qint32 lightness, qint32 a, qint32 b)
+QRgb psd_alab_to_color(quint8 alpha, quint32 L, qint32 a, qint32 b)
 {
-    // For the conversion we first convert values to XYZ and then to RGB
-    // ref_X = 95.047, ref_Y = 100.000, ref_Z = 108.883
+    /* ranges:
+     * L* = 0 to 255
+     * a = -128 to 127
+     * b = -128 to 127
+     */
+    L = L * 100 >> 8;
+    a -= 128;
+    b -= 128;
     qreal x, y, z;
-    const qreal ref_x = 95.047;
-    const qreal ref_y = 100.000;
-    const qreal ref_z = 108.883;
-
-    qreal var_y = ( lightness + 16.0 ) / 116.0;
+    qreal var_y = ( L + 16.0 ) / 116.0;
     qreal var_x = a / 500.0 + var_y;
     qreal var_z = var_y - b / 200.0;
 
@@ -94,12 +122,12 @@ QRgb psd_alab_to_color(quint8 alpha, qint32 lightness, qint32 a, qint32 b)
     y = ref_y * var_y;
     z = ref_z * var_z;
 
-    return psd_axyz_to_color(alpha, x, y, z);
+    return psd_axyz_to_rgba(alpha, x, y, z);
 }
 
-QRgb psd_lab_to_color(qint32 lightness, qint32 a, qint32 b)
+QRgb psd_lab_to_color(qint32 L, qint32 a, qint32 b)
 {
-    return psd_alab_to_color(255, lightness, a, b);
+    return psd_alab_to_color(255, L, a, b);
 }
 
 QPsdHandler::QPsdHandler()
@@ -131,14 +159,7 @@ bool QPsdHandler::canRead() const
 bool QPsdHandler::canRead(QIODevice *device)
 {
     //FIXME: I think this code is dirty, need a better & optimized code
-    QByteArray signatureAndVersion = device->peek(6);
-    if (signatureAndVersion.startsWith("8BPS")) {
-        if (signatureAndVersion.endsWith("\x00\x01") ||
-                signatureAndVersion.endsWith("\x00\x02"))
-            return true;
-        else return false;
-    }
-    return false;
+    return device->peek(4) == "8BPS";
 }
 
 bool QPsdHandler::read(QImage *image)
@@ -200,6 +221,7 @@ bool QPsdHandler::read(QImage *image)
      * Multichannel = 7; Duotone = 8; Lab = 9 */
     input >> colorMode;
     switch (colorMode) {
+    case 0:
     case 1:
     case 2:
     case 3:
@@ -303,17 +325,15 @@ bool QPsdHandler::read(QImage *image)
              << "\nimage data: " << imageData.size();
     */
 
-    //FIXME: find better alternative for checking this
-    switch (colorMode) {
-    case 0: //for bitmap
+
+    if (colorMode == 0) {
         if (imageData.size() != (channels * totalBytes)/8)
             return false;
-        break;
-    default: //for non-bitmap
+    } else {
         if (imageData.size() != channels * totalBytes)
             return false;
-        break;
     }
+
 
     switch (colorMode) {
     case 0: /*BITMAP*/
@@ -539,8 +559,8 @@ bool QPsdHandler::read(QImage *image)
             case 3:
             {
                 QImage result(width, height, QImage::Format_RGB32);
-                quint8 *lightness = (quint8*)imageData.constData();
-                quint8 *a = lightness + totalBytes;
+                quint8 *L = (quint8*)imageData.constData();
+                quint8 *a = L + totalBytes;
                 quint8 *b = a + totalBytes;
 
                 QRgb  *p, *end;
@@ -548,8 +568,8 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        *p = psd_lab_to_color(*lightness * 100 >> 8, *a - 128, *b - 128);
-                        ++p; ++lightness; ++a; ++b;
+                        *p = psd_lab_to_color(*L, *a, *b);
+                        ++p; ++L; ++a; ++b;
                     }
 
                 }
@@ -558,10 +578,10 @@ bool QPsdHandler::read(QImage *image)
             }
             case 4:
             {
-                QImage result(width, height, QImage::Format_RGB32);
+                QImage result(width, height, QImage::Format_ARGB32);
                 quint8 *alpha = (quint8*)imageData.constData();
-                quint8 *lightness = alpha + totalBytes;
-                quint8 *a = lightness + totalBytes;
+                quint8 *L = alpha + totalBytes;
+                quint8 *a = L + totalBytes;
                 quint8 *b = a + totalBytes;
 
                 QRgb  *p, *end;
@@ -569,8 +589,8 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        *p = psd_alab_to_color(*alpha, *lightness * 100 >> 8, *a - 128, *b - 128);
-                        ++p; ++alpha; ++lightness; ++a; ++b;
+                        *p = psd_alab_to_color(*alpha, *L, *a, *b);
+                        ++p; ++alpha; ++L; ++a; ++b;
                     }
 
                 }
@@ -604,7 +624,7 @@ QVariant QPsdHandler::option(ImageOption option) const
         input.skipRawData(6);//reserved bytes should be 6-byte in size
         input >> channels >> height >> width >> depth >> colorMode;
         if (input.status() == QDataStream::Ok && signature == 0x38425053 &&
-                (version == 0x0001 || version == 0x0002))
+                (version == 1 || version == 2))
             return QSize(width, height);
     }
     return QVariant();
