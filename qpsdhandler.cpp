@@ -28,6 +28,9 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 const qreal ref_x = 95.047;
 const qreal ref_y = 100.000;
 const qreal ref_z = 108.883;
+const qreal e = 216/24389;
+const qreal k = 24389/27;
+const qreal gamma = 2.19921875;
 
 QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
 {
@@ -35,17 +38,20 @@ QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
     qreal var_y = y / 100.0;
     qreal var_z = z / 100.0;
 
-    /* From "Color Conversion Algorithms"
-     * http://www.cs.rit.edu/~ncs/color/t_convert.html
-    [ R ]   [  3.240479 -1.537150 -0.498535 ]   [ X ]
-    [ G ] = [ -0.969256  1.875992  0.041556 ] * [ Y ]
-    [ B ]   [  0.055648 -0.204043  1.057311 ]   [ Z ]
+    /*http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+     *Adobe RGB
+         2.0413690 -0.5649464 -0.3446944
+        -0.9692660  1.8760108  0.0415560
+         0.0134474 -0.1183897  1.0154096
     */
 
-    qreal var_r = (var_x * 3.240479) + (var_y * -1.537150) + (var_z * -0.498535);
-    qreal var_g = (var_x * -0.969256) + (var_y * 1.875992) + (var_z * 0.041556);
-    qreal var_b = (var_x * 0.055648) + (var_y * -0.204043) + (var_z * 1.057311);
+    qreal var_r = (var_x * 2.0413690) + (var_y * -0.5649464) + (var_z * -0.3446944);
+    qreal var_g = (var_x * -0.9692660) + (var_y * 1.8760108) + (var_z * 0.0415560);
+    qreal var_b = (var_x * 0.0134474) + (var_y * -0.1183897) + (var_z * 1.0154096);
 
+
+    //sRGB compading
+    /*
     if ( var_r > 0.0031308)
         var_r = (1.055 * pow(var_r, 1/2.4)) - 0.055;
     else
@@ -60,6 +66,12 @@ QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
         var_b = (1.055 * pow(var_b, 1/2.4)) - 0.055;
     else
         var_b = 12.92 * var_b;
+    */
+
+    //gamma companding
+    var_r = pow(var_r, 1/gamma);
+    var_g = pow(var_g, 1/gamma);
+    var_b = pow(var_b, 1/gamma);
 
     int red, green, blue;
 
@@ -70,11 +82,13 @@ QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
     //FIXME: there is a bug: red/green/blue sometimes fall outside the range 0-255
     //bug minimized but not totally solved and color is somewhat different
     //from what photoshop renders
-    red = (red < 0)?0:((red > 255)?2:red);
-    green = (green < 0)?0:((green > 255)?2:green);
-    blue = (blue < 0)?0:((blue > 255)?2:blue);
 
-    //FIXME: I used photoshop to check if the image is viewed correctly
+    red = (red < 0)?0:((red > 255)?255:red);
+    green = (green < 0)?0:((green > 255)?255:green);
+    blue = (blue < 0)?0:((blue > 255)?255:blue);
+
+    //FIXME: (for Lab color space with alpha channel)
+    //I used photoshop to check if the image is viewed correctly
     //and found out that it is transparent at value = 255 so I assumed
     //they inverted it but there are still differences, the algorithm is
     //very closed and there might some kind of computation they used for
@@ -85,7 +99,7 @@ QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
 
 QRgb psd_xyz_to_rgb(qreal x, qreal y, qreal z)
 {
-    return psd_axyz_to_rgba(255, x, y, z);
+    return psd_axyz_to_rgba(0, x, y, z);
 }
 
 QRgb psd_alab_to_color(quint8 alpha, quint32 L, qint32 a, qint32 b)
@@ -98,25 +112,25 @@ QRgb psd_alab_to_color(quint8 alpha, quint32 L, qint32 a, qint32 b)
     L = L * 100 >> 8;
     a -= 128;
     b -= 128;
-    qreal x, y, z;
-    qreal var_y = ( L + 16.0 ) / 116.0;
-    qreal var_x = a / 500.0 + var_y;
-    qreal var_z = var_y - b / 200.0;
+    qreal x, y, z, var_y, var_x, var_z;
+    qreal fy = ( L + 16.0 ) / 116.0;
+    qreal fx = (a / 500.0) + fy;
+    qreal fz = fy - (b / 200.0);
 
-    if ( pow(var_y, 3) > 0.008856 )
-        var_y = pow(var_y, 3);
+    if ( L > k*e )
+        var_y = pow(fy, 3);
     else
-        var_y = ( var_y - 16 / 116 ) / 7.787;
+        var_y = L/k;
 
-    if ( pow(var_x, 3) > 0.008856 )
-        var_x = pow(var_x, 3);
+    if ( pow(fx, 3) > e )
+        var_x = pow(fx, 3);
     else
-        var_x = ( var_x - 16 / 116 ) / 7.787;
+        var_x = ( (116.0*fx) - 16.0 ) / k;
 
-    if ( pow(var_z, 3) > 0.008856 )
-        var_z = pow(var_z, 3);
+    if ( pow(fz, 3) > e )
+        var_z = pow(fz, 3);
     else
-        var_z = ( var_z - 16 / 116 ) / 7.787;
+        var_z = ( (116.0*fz) - 16.0 ) / k;
 
     x = ref_x * var_x;
     y = ref_y * var_y;
