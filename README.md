@@ -44,10 +44,10 @@ Color Mode
 
 CONTRIBUTE
 
-	If you have an existing PSD file with different color mode or compression. Feel free to send me
+	If you have an existing PSD/PSB file with different color mode or compression. Feel free to send me
 	an email at ronmarti18@gmail.com
 	
-	If you want to contribute tso the code, just fork the project and pull requests.
+	If you want to contribute to the code, just fork the project and pull requests.
 	
 
 CONTRIBUTORS

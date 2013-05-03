@@ -21,8 +21,10 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 
 #include "qpsdhandler.h"
+/* For debugging
 #include <QDebug>
-#include <QFile>
+#include <QElapsedTimer>
+*/
 
 // tristimulus: ref_X = 95.047, ref_Y = 100.000, ref_Z = 108.883
 const qreal ref_x = 95.047;
@@ -79,20 +81,20 @@ QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
     green = var_g * 255.0;
     blue = var_b * 255.0;
 
-    //FIXME: there is a bug: red/green/blue sometimes fall outside the range 0-255
-    //bug minimized but not totally solved and color is somewhat different
-    //from what photoshop renders
+    /* FIXME: there is a bug: red/green/blue sometimes fall outside the range 0-255
+     * bug minimized but not totally solved and color is somewhat different
+     * from what photoshop renders */
 
     red = (red < 0)?0:((red > 255)?255:red);
     green = (green < 0)?0:((green > 255)?255:green);
     blue = (blue < 0)?0:((blue > 255)?255:blue);
 
-    //FIXME: (for Lab color space with alpha channel)
-    //I used photoshop to check if the image is viewed correctly
-    //and found out that it is transparent at value = 255 so I assumed
-    //they inverted it but there are still differences, the algorithm is
-    //very closed and there might some kind of computation they used for
-    //the alpha and I cannot find any documentation on it
+    /* FIXME: (for Lab color space with alpha channel)
+     * I used photoshop to check if the image is viewed correctly
+     * and found out that it is transparent at value = 255 so I assumed
+     * they inverted it but there are still differences, the algorithm is
+     * very closed and there might some kind of computation they used for
+     * the alpha and I cannot find any documentation on it */
     alpha = 255 - alpha;
     return qRgba(red, green, blue, alpha);
 }
@@ -155,16 +157,17 @@ QPsdHandler::~QPsdHandler()
 bool QPsdHandler::canRead() const
 {
     if (canRead(device())) {
-        // cannot use setFormat with canRead(QIODevice *device) since
-        // the method is "static"
-        QByteArray signatureAndVersion = device()->peek(6);
-        if (signatureAndVersion.startsWith("8BPS")) {
-            if (signatureAndVersion.endsWith("\x00\x01"))
-                setFormat("psd");
-            else if (signatureAndVersion.endsWith("\x00\x02"))
-                setFormat("psb");
-            else return false;
-        }
+        QByteArray bytes = device()->peek(6);
+        QDataStream input(bytes);
+        input.setByteOrder(QDataStream::BigEndian);
+        quint32 signature;
+        quint16 version;
+        input >> signature >> version;
+        if (version == 1)
+            setFormat("psd");
+        else if (version == 1)
+            setFormat("psb");
+        else return false;
         return true;
     }
     return false;
@@ -172,7 +175,6 @@ bool QPsdHandler::canRead() const
 
 bool QPsdHandler::canRead(QIODevice *device)
 {
-    //FIXME: I think this code is dirty, need a better & optimized code
     return device->peek(4) == "8BPS";
 }
 
@@ -250,11 +252,16 @@ bool QPsdHandler::read(QImage *image)
 
     input >> colorModeDataLength;
     if (colorModeDataLength != 0) {
-        quint8 byte;
+        /* quint8 byte;
         for(quint32 i=0; i<colorModeDataLength; ++i) {
             input >> byte;
             colorData.append(byte);
         }
+        */
+        char *temp = new char[colorModeDataLength];
+        input.readRawData(temp, colorModeDataLength);
+        colorData.append(temp, colorModeDataLength);
+        delete [] temp;
     }
 
     input >> imageResourcesLength;
@@ -282,14 +289,14 @@ bool QPsdHandler::read(QImage *image)
     case 0: /*RAW IMAGE DATA - UNIMPLEMENTED*/
         break;
     case 1: /*RLE COMPRESSED DATA*/
-        // The RLE-compressed data is proceeded by a 2-byte data count for each row in the data,
-        // which we're going to just skip.
+        /* The RLE-compressed data is proceeded by a 2-byte data count for each row in the data,
+         * which we're going to just skip. */
         if (format() == "psd")
             input.skipRawData(height*channels*2);
-        // This section was NOT documented, but because of too much use of
-        // qDebug() + caffeine, I solved it using the verification section
-        // after this switch statement :)
-        // Found out that the resulting image data was NOT of correct size
+        /* This section was NOT documented, but because of too much use of
+         * qDebug() + caffeine, I solved it using the verification section
+         * after this switch statement :)
+         * Found out that the resulting image data was NOT of correct size */
         else if (format() == "psb")
             input.skipRawData(height*channels*4);
 
@@ -301,17 +308,24 @@ bool QPsdHandler::read(QImage *image)
         while (!input.atEnd()) {
             input >> byte;
             if (byte > 128) {
-                count=256-byte;
+                count = 256 - byte;
                 input >>  byte;
+                /* FIXME: improve speed */
                 for (quint8 i=0; i<=count; ++i) {
                     imageData.append(byte);
                 }
             } else if (byte < 128) {
                 count = byte + 1;
+                /*
                 for(quint8 i=0; i<count; ++i) {
                     input >> byte;
                     imageData.append(byte);
                 }
+                */
+                char *temp = new char[count];
+                input.readRawData(temp, count);
+                imageData.append(temp, count);
+                delete [] temp;
             }
         }
         break;
@@ -326,8 +340,8 @@ bool QPsdHandler::read(QImage *image)
 
     int totalBytes = width * height;
 
-    /*this section was made for verification*/
-    /*for developers use ONLY*/
+    /* this section was made for verification
+     * for developers use ONLY */
     /*
     qDebug() << "color mode: " << colorMode
              << "\ndepth: " << depth
@@ -541,7 +555,6 @@ bool QPsdHandler::read(QImage *image)
                  *reading and writing the file.
                  *
                  *TODO: find a way to actually get the duotone, tritone, and quadtone colors
-                 *Noticed the added "Curve" layer when using photoshop
                  */
                 QImage result(width, height, QImage::Format_Indexed8);
                 const int IndexCount = 256;
@@ -565,8 +578,8 @@ bool QPsdHandler::read(QImage *image)
         }
         break;
     case 9: /*LAB - UNDER TESTING*/
-        //FIXME: computation from Lab color mode to RGb has some minor bug
-        //which results to pixels different from the correct conversion
+        /* FIXME: computation from Lab color mode to RGB has some minor bug
+         * which results to pixels different from the correct conversion */
         switch (depth) {
         case 8:
             switch (channels) {

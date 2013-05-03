@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 
 #include "qpsdplugin.h"
-#include "QPsdHandler.h"
+#include "qpsdhandler.h"
 
 QPsdPlugin::QPsdPlugin(QObject *parent) :
     QImageIOPlugin(parent)
@@ -45,13 +45,7 @@ QImageIOPlugin::Capabilities QPsdPlugin::capabilities(
         return Capabilities(CanRead);//TODO: add CanWrite support
     if (!(format.isEmpty() && device->isOpen()))
         return 0;
-
-    Capabilities cap;
-    if (device->isReadable() && QPsdHandler::canRead(device))
-        cap |= CanRead;
-    // if (device->isWritable())
-    //     cap |= CanWrite;
-    return cap;
+    return false;
 }
 
 QImageIOHandler *QPsdPlugin::create(
