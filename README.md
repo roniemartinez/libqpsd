@@ -10,7 +10,7 @@ Format:
 
 	PSD - SUPPORTED
 	
-	PSB - SUPPORTED (Partial/Testing)
+	PSB - SUPPORTED
 	
 Compression:
 
@@ -34,7 +34,7 @@ Color Mode
 
 	CMYK - SUPPORTED
 
-	Multichannel - Unsupported
+	Multichannel - SUPPORTED
 
 	Duotone - SUPPORTED
 

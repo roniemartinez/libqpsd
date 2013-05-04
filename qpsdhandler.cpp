@@ -34,7 +34,7 @@ const qreal e = 216/24389;
 const qreal k = 24389/27;
 const qreal gamma = 2.19921875;
 
-QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
+QRgb aXyzToRgba(quint8 alpha, qreal x, qreal y, qreal z)
 {
     qreal var_x = x / 100.0;
     qreal var_y = y / 100.0;
@@ -99,12 +99,12 @@ QRgb psd_axyz_to_rgba(quint8 alpha, qreal x, qreal y, qreal z)
     return qRgba(red, green, blue, alpha);
 }
 
-QRgb psd_xyz_to_rgb(qreal x, qreal y, qreal z)
+QRgb XyzToRgb(qreal x, qreal y, qreal z)
 {
-    return psd_axyz_to_rgba(0, x, y, z);
+    return aXyzToRgba(0, x, y, z);
 }
 
-QRgb psd_alab_to_color(quint8 alpha, quint32 L, qint32 a, qint32 b)
+QRgb aLabToRgb(quint8 alpha, quint32 L, qint32 a, qint32 b)
 {
     /* ranges:
      * L* = 0 to 255
@@ -138,12 +138,12 @@ QRgb psd_alab_to_color(quint8 alpha, quint32 L, qint32 a, qint32 b)
     y = ref_y * var_y;
     z = ref_z * var_z;
 
-    return psd_axyz_to_rgba(alpha, x, y, z);
+    return aXyzToRgba(alpha, x, y, z);
 }
 
-QRgb psd_lab_to_color(qint32 L, qint32 a, qint32 b)
+QRgb LabToRgb(qint32 L, qint32 a, qint32 b)
 {
-    return psd_alab_to_color(255, L, a, b);
+    return aLabToRgb(255, L, a, b);
 }
 
 QPsdHandler::QPsdHandler()
@@ -308,9 +308,8 @@ bool QPsdHandler::read(QImage *image)
         while (!input.atEnd()) {
             input >> byte;
             if (byte > 128) {
-                count = 256 - byte;
+                count = 256 - byte ;
                 input >>  byte;
-                /* FIXME: improve speed */
                 for (quint8 i=0; i<=count; ++i) {
                     imageData.append(byte);
                 }
@@ -353,7 +352,6 @@ bool QPsdHandler::read(QImage *image)
              << "\nimage data: " << imageData.size();
     */
 
-
     if (colorMode == 0) {
         if (imageData.size() != (channels * totalBytes)/8)
             return false;
@@ -376,7 +374,6 @@ bool QPsdHandler::read(QImage *image)
         else
             *image = result;
     }
-
         break;
     case 1: /*GRAYSCALE*/
         switch (depth) {
@@ -401,7 +398,6 @@ bool QPsdHandler::read(QImage *image)
                 break;
             }
         }
-
         break;
     case 2: /*INDEXED*/
         switch (depth) {
@@ -441,8 +437,6 @@ bool QPsdHandler::read(QImage *image)
             break;
         case 8:
             switch(channels) {
-            case 1:
-                break;
             case 3:
             {
                 QImage result(width, height, QImage::Format_RGB32);
@@ -482,9 +476,6 @@ bool QPsdHandler::read(QImage *image)
                 *image = result;
             }
                 break;
-            case 5:
-                Q_ASSERT("UNSUPPORTED: 5 channels of rgb mode");
-                return false;
             }
 
             break;
@@ -539,8 +530,56 @@ bool QPsdHandler::read(QImage *image)
             }
         }
         break;
-    case 7: /*MULTICHANNEL - UNIMPLEMENTED*/
-        return 0;
+    case 7: /*MULTICHANNEL - UNDER TESTING*/
+        /* Reference: http://help.adobe.com/en_US/photoshop/cs/using/WSfd1234e1c4b69f30ea53e41001031ab64-73eea.html#WSfd1234e1c4b69f30ea53e41001031ab64-73e5a
+         * Converting a CMYK image to Multichannel mode creates cyan, magenta, yellow, and black spot channels.
+         * Converting an RGB image to Multichannel mode creates cyan, magenta, and yellow spot channels.
+         */
+        switch (depth) {
+        case 8:
+            switch (channels) {
+            case 3:
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *cyan = (quint8*)imageData.constData();
+                quint8 *magenta = cyan + totalBytes;
+                quint8 *yellow = magenta + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = QColor::fromCmyk(255-*cyan, 255-*magenta,
+                                              255-*yellow, 0).rgb();
+                        ++p; ++cyan; ++magenta; ++yellow;;
+                    }
+                }
+                *image = result;
+            }
+                break;
+            case 4:
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *cyan = (quint8*)imageData.constData();
+                quint8 *magenta = cyan + totalBytes;
+                quint8 *yellow = magenta + totalBytes;
+                quint8 *key = yellow + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = QColor::fromCmyk(255-*cyan, 255-*magenta,
+                                              255-*yellow, 255-*key).rgb();
+                        ++p; ++cyan; ++magenta; ++yellow; ++key;
+                    }
+                }
+                *image = result;
+            }
+                break;
+            }
+            break;
+        }
         break;
     case 8: /*DUOTONE*/
         switch (depth) {
@@ -595,7 +634,7 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        *p = psd_lab_to_color(*L, *a, *b);
+                        *p = LabToRgb(*L, *a, *b);
                         ++p; ++L; ++a; ++b;
                     }
 
@@ -616,7 +655,7 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        *p = psd_alab_to_color(*alpha, *L, *a, *b);
+                        *p = aLabToRgb(*alpha, *L, *a, *b);
                         ++p; ++alpha; ++L; ++a; ++b;
                     }
 
