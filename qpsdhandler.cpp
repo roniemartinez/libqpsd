@@ -26,13 +26,18 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 #include <QElapsedTimer>
 */
 
-// tristimulus: ref_X = 95.047, ref_Y = 100.000, ref_Z = 108.883
-const qreal ref_x = 95.047;
-const qreal ref_y = 100.000;
-const qreal ref_z = 108.883;
+/* tristimulus reference: Adobe RGB (1998) Color Image Encoding
+ * http://www.adobe.com/digitalimag/pdfs/AdobeRGB1998.pdf
+ * D65 0.9505, 1.0000, 1.0891
+ * D50 0.9642, 1.000, 0.8249
+ */
+
+const qreal ref_x = 96.05;
+const qreal ref_y = 100.00;
+const qreal ref_z = 108.91;
 const qreal e = 216/24389;
 const qreal k = 24389/27;
-const qreal gamma = 2.19921875;
+const qreal gamma = 563/256; //2.19921875
 
 QRgb aXyzToRgba(quint8 alpha, qreal x, qreal y, qreal z)
 {
@@ -40,20 +45,24 @@ QRgb aXyzToRgba(quint8 alpha, qreal x, qreal y, qreal z)
     qreal var_y = y / 100.0;
     qreal var_z = z / 100.0;
 
-    /*http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
-     *Adobe RGB
+    /* http://www.brucelindbloom.com/index.html?Eqn_RGB_XYZ_Matrix.html
+     * Adobe RGB
+     * D65
          2.0413690 -0.5649464 -0.3446944
         -0.9692660  1.8760108  0.0415560
          0.0134474 -0.1183897  1.0154096
+
+     * D50
+         1.9624274 -0.6105343 -0.3413404
+        -0.9787684  1.9161415  0.0334540
+         0.0286869 -0.1406752  1.3487655
     */
 
     qreal var_r = (var_x * 2.0413690) + (var_y * -0.5649464) + (var_z * -0.3446944);
     qreal var_g = (var_x * -0.9692660) + (var_y * 1.8760108) + (var_z * 0.0415560);
     qreal var_b = (var_x * 0.0134474) + (var_y * -0.1183897) + (var_z * 1.0154096);
 
-
-    //sRGB compading
-    /*
+    /*sRGB compading
     if ( var_r > 0.0031308)
         var_r = (1.055 * pow(var_r, 1/2.4)) - 0.055;
     else
@@ -104,14 +113,16 @@ QRgb XyzToRgb(qreal x, qreal y, qreal z)
     return aXyzToRgba(0, x, y, z);
 }
 
-QRgb aLabToRgb(quint8 alpha, quint32 L, qint32 a, qint32 b)
+QRgb aLabToRgb(quint8 alpha, qint32 L, qint32 a, qint32 b)
 {
     /* ranges:
-     * L* = 0 to 255
+     * L* = 0 to 100
      * a = -128 to 127
      * b = -128 to 127
      */
-    L = L * 100 >> 8;
+
+    //L = L * 100 >> 8;
+    L = L / 2.55;
     a -= 128;
     b -= 128;
     qreal x, y, z, var_y, var_x, var_z;
@@ -258,10 +269,15 @@ bool QPsdHandler::read(QImage *image)
             colorData.append(byte);
         }
         */
+        /*
         char *temp = new char[colorModeDataLength];
         input.readRawData(temp, colorModeDataLength);
         colorData.append(temp, colorModeDataLength);
         delete [] temp;
+        */
+        /* This code is faster than the 2 alternatives above */
+        colorData.resize(colorModeDataLength);
+        input.readRawData(colorData.data(), colorModeDataLength);
     }
 
     input >> imageResourcesLength;
@@ -301,10 +317,10 @@ bool QPsdHandler::read(QImage *image)
             input.skipRawData(height*channels*4);
 
         quint8 byte,count;
-        imageData.clear();
 
         /* Code based on PackBits implementation which is primarily used by
          * Photoshop for RLE encoding/decoding */
+
         while (!input.atEnd()) {
             input >> byte;
             if (byte > 128) {
@@ -321,10 +337,16 @@ bool QPsdHandler::read(QImage *image)
                     imageData.append(byte);
                 }
                 */
+                /*
                 char *temp = new char[count];
                 input.readRawData(temp, count);
                 imageData.append(temp, count);
                 delete [] temp;
+                */
+                /* This code is faster than the 2 alternatives above */
+                int size = imageData.size();
+                imageData.resize(size+count);
+                input.readRawData(imageData.data()+size, count);
             }
         }
         break;
@@ -612,7 +634,6 @@ bool QPsdHandler::read(QImage *image)
                 *image = result;
                 break;
             }
-
             break;
         }
         break;
@@ -637,7 +658,6 @@ bool QPsdHandler::read(QImage *image)
                         *p = LabToRgb(*L, *a, *b);
                         ++p; ++L; ++a; ++b;
                     }
-
                 }
                 *image = result;
                 break;
