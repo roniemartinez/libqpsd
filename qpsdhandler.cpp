@@ -370,7 +370,8 @@ bool QPsdHandler::read(QImage *image)
     /* this section was made for verification
      * for developers use ONLY */
     /*
-    qDebug() << "color mode: " << colorMode
+    qDebug() << endl
+             <<"color mode: " << colorMode
              << "\ndepth: " << depth
              << "\nchannels: " << channels
              << "\ncompression: " << compression
@@ -418,6 +419,24 @@ bool QPsdHandler::read(QImage *image)
                     for (quint32 j=0; j < width; ++j) {
                         result.setPixel(j,i, *data);
                         ++data;
+                    }
+                }
+                *image = result;
+            }
+                break;
+            case 2: /* graycale with alpha channel */
+            {
+                QImage result(width, height, QImage::Format_ARGB32);
+
+                quint8 *data = (quint8*)imageData.constData();
+                quint8 *alpha = data + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = qRgba(*data, *data, *data, *alpha);
+                        ++p; ++data; ++alpha;
                     }
                 }
                 *image = result;
