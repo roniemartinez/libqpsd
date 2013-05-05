@@ -43,9 +43,11 @@ QImageIOPlugin::Capabilities QPsdPlugin::capabilities(
 {
     if (format == "psd" || format == "psb")
         return Capabilities(CanRead);//TODO: add CanWrite support
-    if (!(format.isEmpty() && device->isOpen()))
-        return 0;
-    return false;
+
+    Capabilities cap;
+    if (device->isReadable() && QPsdHandler::canRead(device))
+        cap |= CanRead;
+    return cap;
 }
 
 QImageIOHandler *QPsdPlugin::create(
