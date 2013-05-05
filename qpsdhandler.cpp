@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 
 #include "qpsdhandler.h"
-/* For debugging
+/* For debugging purposes
 #include <QDebug>
 #include <QElapsedTimer>
 */
@@ -62,33 +62,10 @@ QRgb aXyzToRgba(quint8 alpha, qreal x, qreal y, qreal z)
     qreal var_g = (var_x * -0.9692660) + (var_y * 1.8760108) + (var_z * 0.0415560);
     qreal var_b = (var_x * 0.0134474) + (var_y * -0.1183897) + (var_z * 1.0154096);
 
-    /*sRGB compading
-    if ( var_r > 0.0031308)
-        var_r = (1.055 * pow(var_r, 1/2.4)) - 0.055;
-    else
-        var_r = 12.92 * var_r;
-
-    if ( var_g > 0.0031308)
-        var_g = (1.055 * pow(var_g, 1/2.4)) - 0.055;
-    else
-        var_g = 12.92 * var_g;
-
-    if ( var_b > 0.0031308)
-        var_b = (1.055 * pow(var_b, 1/2.4)) - 0.055;
-    else
-        var_b = 12.92 * var_b;
-    */
-
-    //gamma companding
-    var_r = pow(var_r, 1/gamma);
-    var_g = pow(var_g, 1/gamma);
-    var_b = pow(var_b, 1/gamma);
-
-    int red, green, blue;
-
-    red = var_r * 255.0;
-    green = var_g * 255.0;
-    blue = var_b * 255.0;
+    /* gamma companding */
+    int red = pow(var_r, 1/gamma) * 255.0;
+    int green = pow(var_g, 1/gamma) * 255.0;
+    int blue = pow(var_b, 1/gamma) * 255.0;
 
     /* FIXME: there is a bug: red/green/blue sometimes fall outside the range 0-255
      * bug minimized but not totally solved and color is somewhat different
@@ -263,13 +240,14 @@ bool QPsdHandler::read(QImage *image)
 
     input >> colorModeDataLength;
     if (colorModeDataLength != 0) {
-        /* quint8 byte;
+        /* Alternative 1:
+        quint8 byte;
         for(quint32 i=0; i<colorModeDataLength; ++i) {
             input >> byte;
             colorData.append(byte);
         }
         */
-        /*
+        /* Alternative 2:
         char *temp = new char[colorModeDataLength];
         input.readRawData(temp, colorModeDataLength);
         colorData.append(temp, colorModeDataLength);
@@ -300,11 +278,31 @@ bool QPsdHandler::read(QImage *image)
     if (input.status() != QDataStream::Ok)
         return false;
 
+    //QElapsedTimer timer;
+    //timer.start();
     QByteArray imageData;
     switch (compression) {
-    case 0: /*RAW IMAGE DATA - UNIMPLEMENTED*/
+    case 0: /*RAW IMAGE DATA - UNDER TESTING*/
+    {
+        /* NOTE: This algorithm might be inaccurate and was based ONLY
+         * on a psd file I obtained (no references) */
+
+        /* This code is faster than the alternative below */
+        int size = width * height * channels;
+        if (colorMode == 0)
+            size /= 8;
+        imageData.resize(size);
+        input.readRawData(imageData.data(), size);
+        /* Alternative:
+        quint8 byte;
+        while (!input.atEnd()) {
+            input >> byte;
+            imageData.append(byte);
+        }*/
+    }
         break;
     case 1: /*RLE COMPRESSED DATA*/
+    {
         /* The RLE-compressed data is proceeded by a 2-byte data count for each row in the data,
          * which we're going to just skip. */
         if (format() == "psd")
@@ -326,18 +324,24 @@ bool QPsdHandler::read(QImage *image)
             if (byte > 128) {
                 count = 256 - byte ;
                 input >>  byte;
+                /* This code is still faster than the
+                 * alternative below */
                 for (quint8 i=0; i<=count; ++i) {
                     imageData.append(byte);
                 }
+                /* Alternative:
+                ++count;
+                imageData.append(QByteArray(count, char(byte)));
+                */
             } else if (byte < 128) {
                 count = byte + 1;
-                /*
+                /* Alternative 1:
                 for(quint8 i=0; i<count; ++i) {
                     input >> byte;
                     imageData.append(byte);
                 }
                 */
-                /*
+                /* Alternative 2:
                 char *temp = new char[count];
                 input.readRawData(temp, count);
                 imageData.append(temp, count);
@@ -349,12 +353,14 @@ bool QPsdHandler::read(QImage *image)
                 input.readRawData(imageData.data()+size, count);
             }
         }
+    }
         break;
     case 2:/*ZIP WITHOUT PREDICTION - UNIMPLEMENTED*/
         break;
     case 3:/*ZIP WITH PREDICTION - UNIMPLEMENTED*/
         break;
     }
+    //qDebug() << timer.nsecsElapsed();
 
     if (input.status() != QDataStream::Ok)
         return false;
@@ -374,37 +380,36 @@ bool QPsdHandler::read(QImage *image)
              << "\nimage data: " << imageData.size();
     */
 
-    if (colorMode == 0) {
-        if (imageData.size() != (channels * totalBytes)/8)
-            return false;
-    } else {
-        if (imageData.size() != channels * totalBytes)
-            return false;
-    }
-
-
     switch (colorMode) {
     case 0: /*BITMAP*/
     {
+        if (imageData.size() != (channels * totalBytes)/8)
+            return false;
+
         QString head = QString("P4\n%1 %2\n").arg(width).arg(height);
-        //QByteArray buffer(head.toAscii());
         QByteArray buffer(head.toUtf8());
         buffer.append(imageData);
         QImage result = QImage::fromData(buffer);
         if (result.isNull())
             return false;
-        else
+        else {
             *image = result;
+            return true;
+        }
     }
         break;
     case 1: /*GRAYSCALE*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         switch (depth) {
         case 8:
             switch (channels) {
             case 1:
+            {
                 QImage result(width, height, QImage::Format_Indexed8);
-                const int IndexCount = 256;
-                for (int i = 0; i < IndexCount; ++i){
+                for (int i = 0; i < 256; ++i){
                     result.setColor(i, qRgb(i, i, i));
                 }
 
@@ -415,20 +420,32 @@ bool QPsdHandler::read(QImage *image)
                         ++data;
                     }
                 }
-
                 *image = result;
+            }
+                break;
+            default:
+                return false;
                 break;
             }
+            break;
+        default:
+            return false;
+            break;
         }
+    }
         break;
     case 2: /*INDEXED*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         switch (depth) {
         case 8:
             switch (channels) {
             case 1:
+            {
                 QImage result(width, height, QImage::Format_Indexed8);
                 int indexCount = colorData.size() / 3;
-                //Q_ASSERT(indexCount == 256);
                 quint8 *red = (quint8*)colorData.constData();
                 quint8 *green = red + indexCount;
                 quint8 *blue = green + indexCount;
@@ -449,14 +466,25 @@ bool QPsdHandler::read(QImage *image)
                     }
                 }
                 *image=result;
+            }
+                break;
+            default:
+                return false;
                 break;
             }
+            break;
+        default:
+            return false;
+            break;
         }
+    }
         break;
     case 3: /*RGB*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         switch (depth) {
-        case 1: return false;
-            break;
         case 8:
             switch(channels) {
             case 3:
@@ -498,12 +526,22 @@ bool QPsdHandler::read(QImage *image)
                 *image = result;
             }
                 break;
+            default:
+                return false;
+                break;
             }
-
+            break;
+        default:
+            return false;
             break;
         }
+    }
         break;
     case 4: /*CMYK*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         switch (depth) {
         case 8:
             switch (channels) {
@@ -549,10 +587,22 @@ bool QPsdHandler::read(QImage *image)
                 *image = result;
             }
                 break;
+            default:
+                return false;
+                break;
             }
+            break;
+        default:
+            return false;
+            break;
         }
+    }
         break;
     case 7: /*MULTICHANNEL - UNDER TESTING*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         /* Reference: http://help.adobe.com/en_US/photoshop/cs/using/WSfd1234e1c4b69f30ea53e41001031ab64-73eea.html#WSfd1234e1c4b69f30ea53e41001031ab64-73e5a
          * Converting a CMYK image to Multichannel mode creates cyan, magenta, yellow, and black spot channels.
          * Converting an RGB image to Multichannel mode creates cyan, magenta, and yellow spot channels.
@@ -599,15 +649,27 @@ bool QPsdHandler::read(QImage *image)
                 *image = result;
             }
                 break;
+            default:
+                return false;
+                break;
             }
             break;
+        default:
+            return false;
+            break;
         }
+    }
         break;
     case 8: /*DUOTONE*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         switch (depth) {
         case 8:
             switch (channels) {
             case 1:
+            {
                 /*
                  *Duotone images: color data contains the duotone specification
                  *(the format of which is not documented). Other applications that
@@ -618,8 +680,7 @@ bool QPsdHandler::read(QImage *image)
                  *TODO: find a way to actually get the duotone, tritone, and quadtone colors
                  */
                 QImage result(width, height, QImage::Format_Indexed8);
-                const int IndexCount = 256;
-                for(int i = 0; i < IndexCount; ++i){
+                for(int i = 0; i < 256; ++i){
                     result.setColor(i, qRgb(i, i, i));
                 }
                 quint8 *data = (quint8*)imageData.constData();
@@ -632,12 +693,24 @@ bool QPsdHandler::read(QImage *image)
                     }
                 }
                 *image = result;
+            }
+                break;
+            default:
+                return false;
                 break;
             }
             break;
+        default:
+            return false;
+            break;
         }
+    }
         break;
     case 9: /*LAB - UNDER TESTING*/
+    {
+        if (imageData.size() != channels * totalBytes)
+            return false;
+
         /* FIXME: computation from Lab color mode to RGB has some minor bug
          * which results to pixels different from the correct conversion */
         switch (depth) {
@@ -660,8 +733,8 @@ bool QPsdHandler::read(QImage *image)
                     }
                 }
                 *image = result;
-                break;
             }
+                break;
             case 4:
             {
                 QImage result(width, height, QImage::Format_ARGB32);
@@ -681,14 +754,25 @@ bool QPsdHandler::read(QImage *image)
 
                 }
                 *image = result;
+            }
+                break;
+            default:
+                return false;
                 break;
             }
-            }
+            break;
+        default:
+            return false;
             break;
         }
+    }
+        break;
+    default: /*NOT DOCUMENTED*/
+    {
+        return false;
+    }
         break;
     }
-
     return input.status() == QDataStream::Ok;
 }
 

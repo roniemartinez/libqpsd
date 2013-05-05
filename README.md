@@ -14,7 +14,7 @@ Format:
 	
 Compression:
 
-	Raw - Unsupported
+	Raw - SUPPORTED
 
 	RLE - SUPPORTED
 
