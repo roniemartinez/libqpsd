@@ -21,7 +21,7 @@ Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA
 */
 
 #include "qpsdhandler.h"
-/* For debugging purposes
+/* For debugging purposes ONLY
 #include <QDebug>
 #include <QElapsedTimer>
 */
@@ -288,7 +288,7 @@ bool QPsdHandler::read(QImage *image)
          * on a psd file I obtained (no references) */
 
         /* This code is faster than the alternative below */
-        int size = width * height * channels;
+        int size = width * height * channels * (depth/8);
         if (colorMode == 0)
             size /= 8;
         imageData.resize(size);
@@ -409,15 +409,18 @@ bool QPsdHandler::read(QImage *image)
             switch (channels) {
             case 1:
             {
+                /*
                 QImage result(width, height, QImage::Format_Indexed8);
                 for (int i = 0; i < 256; ++i){
                     result.setColor(i, qRgb(i, i, i));
                 }
-
+                */
+                QImage result(width, height, QImage::Format_RGB32);
                 quint8 *data = (quint8*)imageData.constData();
                 for (quint32 i=0; i < height; ++i) {
                     for (quint32 j=0; j < width; ++j) {
-                        result.setPixel(j,i, *data);
+                        //result.setPixel(j, i, *data);
+                        result.setPixel(j, i, qRgb(*data, *data, *data));
                         ++data;
                     }
                 }
@@ -500,12 +503,12 @@ bool QPsdHandler::read(QImage *image)
         break;
     case 3: /*RGB*/
     {
-        if (imageData.size() != channels * totalBytes)
+        if (imageData.size() != channels * totalBytes * (depth/8))
             return false;
 
         switch (depth) {
         case 8:
-            switch(channels) {
+            switch (channels) {
             case 3:
             {
                 QImage result(width, height, QImage::Format_RGB32);
@@ -550,8 +553,173 @@ bool QPsdHandler::read(QImage *image)
                 break;
             }
             break;
+        case 16:
+            switch (channels) {
+            case 3:
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint16 red16, blue16, green16;
+                quint8 *red8 = (quint8*)imageData.constData();
+                quint8 *green8 = red8 + totalBytes * 2;
+                quint8 *blue8 = green8 + totalBytes * 2;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        /* FIXME: find a cleaner, shorter method if possible
+                         * steps:
+                         * get high byte then left shift by 8 bits (color16 = *byte << 8)
+                         * move pointers (++byte)
+                         * get low byte then add it to high byte (color16 += *byte)
+                         * convert 16-bit depth color to 8-bit depth color
+                         *            by scaling it (color16 * 255 / 65535)
+                         * move pointers (++byte)
+                         */
+                        red16 = *red8 << 8;
+                        green16 = *green8 << 8;
+                        blue16 = *blue8 << 8;
+                        ++red8; ++green8; ++blue8;
+                        red16 += *red8;
+                        green16 += *green8;
+                        blue16 += *blue8;
+                        *p = qRgb(quint8(red16 * 255 / 65535),
+                                   quint8(green16 * 255 / 65535),
+                                   quint8(blue16 * 255 / 65535));
+                        ++p; ++red8; ++green8; ++blue8;
+                    }
+                }
+                    *image = result;
+            }
+                break;
+            case 4:
+            {
+                QImage result(width, height, QImage::Format_ARGB32);
+                quint16 red16, blue16, green16, alpha16;
+                quint8 *red8 = (quint8*)imageData.constData();
+                quint8 *green8 = red8 + totalBytes * 2;
+                quint8 *blue8 = green8 + totalBytes * 2;
+                quint8 *alpha8 = blue8 + totalBytes * 2;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        /* FIXME: find a cleaner, shorter method if possible
+                         * steps:
+                         * get high byte then left shift by 8 bits (color16 = *byte << 8)
+                         * move pointers (++byte)
+                         * get low byte then add it to high byte (color16 += *byte)
+                         * convert 16-bit depth color to 8-bit depth color
+                         *            by scaling it (color16 * 255 / 65535)
+                         * move pointers (++byte)
+                         */
+                        red16 = *red8 << 8;
+                        green16 = *green8 << 8;
+                        blue16 = *blue8 << 8;
+                        alpha16 = *alpha8 << 8;
+                        ++red8; ++green8; ++blue8; ++alpha8;
+                        red16 += *red8;
+                        green16 += *green8;
+                        blue16 += *blue8;
+                        alpha16 += *alpha8;
+                        *p = qRgba(quint8(red16 * 255 / 65535),
+                                   quint8(green16 * 255 / 65535),
+                                   quint8(blue16 * 255 / 65535),
+                                   quint8(alpha16 * 255 / 65535));
+                        ++p; ++red8; ++green8; ++blue8; ++alpha8;
+                    }
+                }
+
+                *image = result;
+            }
+                break;
+            default:
+                return false;
+                break;
+            }
+            break;
+        case 32:
+            switch (channels) {
+            case 3:
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint32 red32 = 0;
+                quint32 blue32 = 0;
+                quint32 green32 = 0;
+                quint8 *red8 = (quint8*)imageData.constData();
+                quint8 *green8 = red8 + totalBytes * 4;
+                quint8 *blue8 = green8 + totalBytes * 4;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        /* FIXME: find a cleaner, shorter method if possible */
+                        //4,294,967,295
+                        for (int i = 0; i < 3; ++i) {
+                            red32 += *red8;
+                            green32 += *green8;
+                            blue32 += *blue8;
+                            red32 <<= 8;
+                            green32 <<= 8;
+                            blue32 <<= 8;
+                            ++red8; ++green8; ++blue8;
+                        }
+                        *p = qRgb(quint8(red32 * 255 / 4294967295),
+                                   quint8(green32 * 255 / 4294967295),
+                                   quint8(blue32 * 255 / 4294967295));
+                        ++p;
+                    }
+                }
+                    *image = result;
+            }
+                break;
+            case 4:
+            {
+                QImage result(width, height, QImage::Format_ARGB32);
+                quint32 red32 = 0;
+                quint32 blue32 = 0;
+                quint32 green32 = 0;
+                quint32 alpha32 = 0;
+                quint8 *red8 = (quint8*)imageData.constData();
+                quint8 *green8 = red8 + totalBytes * 4;
+                quint8 *blue8 = green8 + totalBytes * 4;
+                quint8 *alpha8 = blue8 + totalBytes * 4;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        /* FIXME: find a cleaner, shorter method if possible */
+                        //4,294,967,295
+                        for (int i = 0; i < 3; ++i) {
+                            red32 += *red8;
+                            green32 += *green8;
+                            blue32 += *blue8;
+                            alpha32 += *alpha8;
+                            red32 <<= 8;
+                            green32 <<= 8;
+                            blue32 <<= 8;
+                            alpha32 <<= 8;
+                            ++red8; ++green8; ++blue8; ++alpha8;
+                        }
+                        *p = qRgba(quint8(red32 * 255 / 4294967295),
+                                   quint8(green32 * 255 / 4294967295),
+                                   quint8(blue32 * 255 / 4294967295),
+                                   quint8(alpha32 * 255 / 4294967295));
+                        ++p;
+                    }
+                }
+                    *image = result;
+            }
+                break;
+            default:
+                return false;
+                break;
+            }
+            break;
         default:
-            return false;
             break;
         }
     }
