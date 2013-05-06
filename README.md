@@ -40,6 +40,17 @@ Color Mode
 
 	Lab - SUPPORTED (minor bug on Lab to RGB computation exists)
 	
+Depth
+
+	1-bit - SUPPORTED (Bitmap)
+	
+	8-bits - SUPPORTED
+	
+	16-bits - SUPPORTED (RGB ONLY)*
+	
+	32-bits - SUPPORTED (RGB ONLY)*
+	
+	*16-bit and 32-bit depths are scaled down to 8-bits
 
 
 CONTRIBUTE
@@ -48,7 +59,6 @@ CONTRIBUTE
 	an email at ronmarti18@gmail.com
 	
 	If you want to contribute to the code, just fork the project and pull requests.
-	
 
 CONTRIBUTORS
 
