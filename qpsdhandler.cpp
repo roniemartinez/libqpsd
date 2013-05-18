@@ -639,6 +639,7 @@ bool QPsdHandler::read(QImage *image)
                 break;
             }
             break;
+        /* Removed temporarily... incorrect
         case 32:
             switch (channels) {
             case 3:
@@ -655,8 +656,6 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        /* FIXME: find a cleaner, shorter method if possible */
-                        //4,294,967,295
                         for (int i = 0; i < 3; ++i) {
                             red32 += *red8;
                             green32 += *green8;
@@ -667,8 +666,8 @@ bool QPsdHandler::read(QImage *image)
                             ++red8; ++green8; ++blue8;
                         }
                         *p = qRgb(quint8(red32 * 255 / 4294967295),
-                                   quint8(green32 * 255 / 4294967295),
-                                   quint8(blue32 * 255 / 4294967295));
+                                  quint8(green32 * 255 / 4294967295),
+                                  quint8(blue32 * 255 / 4294967295));
                         ++p;
                     }
                 }
@@ -691,7 +690,6 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        /* FIXME: find a cleaner, shorter method if possible */
                         //4,294,967,295
                         for (int i = 0; i < 3; ++i) {
                             red32 += *red8;
@@ -718,7 +716,7 @@ bool QPsdHandler::read(QImage *image)
                 return false;
                 break;
             }
-            break;
+            break;*/
         default:
             break;
         }
@@ -755,11 +753,11 @@ bool QPsdHandler::read(QImage *image)
             case 5:
             {
                 QImage result(width, height, QImage::Format_ARGB32);
-                quint8 *alpha = (quint8*)imageData.constData();
-                quint8 *cyan = alpha + totalBytes;
+                quint8 *cyan = (quint8*)imageData.constData();
                 quint8 *magenta = cyan + totalBytes;
                 quint8 *yellow = magenta + totalBytes;
                 quint8 *key = yellow + totalBytes;
+                quint8 *alpha = key + totalBytes;
                 QRgb  *p, *end;
                 for (quint32 y = 0; y < height; ++y) {
                     p = (QRgb *)result.scanLine(y);
