@@ -48,10 +48,12 @@ Depth
 	
 	16-bits - SUPPORTED (RGB ONLY)*
 	
-	32-bits - SUPPORTED (RGB ONLY)*
+	*16-bit depth is scaled down to 8-bits
 	
-	*16-bit and 32-bit depths are scaled down to 8-bits
 
+BINARIES
+
+	Binaries can be downloaded from http://sourceforge.net/projects/libqpsd/files/
 
 CONTRIBUTE
 
