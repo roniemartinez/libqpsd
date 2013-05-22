@@ -185,7 +185,14 @@ bool QPsdHandler::read(QImage *image)
     input >> version; //version should be 1(PSD) or 2(PSB)
     switch (version) {
     case 1:
+        //check if format is empty or it is not psd
+        if (format().isEmpty() || format() != "psd")
+            setFormat("psd");
+        break;
     case 2:
+        //check if format is empty or it is not psb
+        if (format().isEmpty() || format() != "psb")
+            setFormat("psb");
         break;
     default: return false;
         break;

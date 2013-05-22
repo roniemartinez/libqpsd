@@ -34,7 +34,6 @@ QPsdPlugin::~QPsdPlugin()
 
 QStringList QPsdPlugin::keys() const
 {
-    //TODO: test PSB (Photoshop Big) support
     return QStringList() << "psd" << "psb";
 }
 
