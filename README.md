@@ -46,7 +46,7 @@ Depth
 	
 	8-bits - SUPPORTED
 	
-	16-bits - SUPPORTED (RGB ONLY)*
+        16-bits - SUPPORTED (RGB & CMYK ONLY)*
 	
 	*16-bit depth is scaled down to 8-bits
 	

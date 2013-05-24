@@ -27,7 +27,8 @@ HEADERS += qpsdplugin.h \
     qpsdhandler.h
 OTHER_FILES += \
     QPsdPlugin.json \
-    LICENSE.LGPL
+    LICENSE.LGPL \
+    README.md
 
 unix:!symbian {
     maemo5 {
