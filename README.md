@@ -38,7 +38,7 @@ Color Mode
 
 	Duotone - SUPPORTED
 
-	Lab - SUPPORTED (minor bug on Lab to RGB computation exists)
+	Lab - SUPPORTED
 	
 Depth
 
@@ -46,7 +46,7 @@ Depth
 	
 	8-bits - SUPPORTED
 	
-        16-bits - SUPPORTED (RGB & CMYK ONLY)*
+    16-bits - SUPPORTED
 	
 	*16-bit depth is scaled down to 8-bits
 	
@@ -59,6 +59,8 @@ CONTRIBUTE
 
 	If you have an existing PSD/PSB file with different color mode or compression. Feel free to send me
 	an email at ronmarti18@gmail.com
+	
+	I need samples with zip-compressed layers (zip w/ or w/o prediction). :P
 	
 	If you want to contribute to the code, just fork the project and pull requests.
 

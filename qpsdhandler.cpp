@@ -84,7 +84,7 @@ QRgb XyzaToRgba(qreal x, qreal y, qreal z, quint8 alpha)
     return qRgba(red, green, blue, alpha);
 }
 
-QRgb LabaToRgb(qint32 L, qint32 a, qint32 b, quint8 alpha)
+QRgb LabToRgb(qint32 Lightness, qint32 a, qint32 b, quint8 alpha = 255)
 {
     /* ranges:
      * L* = 0 to 100
@@ -93,18 +93,18 @@ QRgb LabaToRgb(qint32 L, qint32 a, qint32 b, quint8 alpha)
      */
 
     //L = L * 100 >> 8;
-    L = L / 2.55;
+    Lightness = Lightness / 2.55;
     a -= 128;
     b -= 128;
     qreal var_y, var_x, var_z;
-    qreal fy = ( L + 16.0 ) / 116.0;
+    qreal fy = ( Lightness + 16.0 ) / 116.0;
     qreal fx = (a / 500.0) + fy;
     qreal fz = fy - (b / 200.0);
 
-    if ( L > k*e )
+    if ( Lightness > k*e )
         var_y = pow(fy, 3);
     else
-        var_y = L/k;
+        var_y = Lightness/k;
 
     if ( pow(fx, 3) > e )
         var_x = pow(fx, 3);
@@ -123,11 +123,6 @@ QRgb LabaToRgb(qint32 L, qint32 a, qint32 b, quint8 alpha)
     */
 
     return XyzaToRgba(ref_x * var_x, ref_y * var_y, ref_z * var_z, alpha);
-}
-
-QRgb LabToRgb(qint32 L, qint32 a, qint32 b)
-{
-    return LabaToRgb(L, a, b, 255);
 }
 
 QPsdHandler::QPsdHandler()
@@ -361,8 +356,10 @@ bool QPsdHandler::read(QImage *image)
     }
         break;
     case 2:/*ZIP WITHOUT PREDICTION - UNIMPLEMENTED*/
+        return false;
         break;
     case 3:/*ZIP WITH PREDICTION - UNIMPLEMENTED*/
+        return false;
         break;
     }
     //qDebug() << timer.nsecsElapsed();
@@ -455,6 +452,56 @@ bool QPsdHandler::read(QImage *image)
                 return false;
                 break;
             }
+            break;
+        case 16: //Under testing
+        {
+            const qreal scale = (qPow(2, 8) -1 ) / (qPow(2, 16) - 1);
+            switch (channels) {
+            case 1:
+            {
+                quint16 data16;
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *data8 = (quint8*)imageData.constData();
+                for (quint32 i=0; i < height; ++i) {
+                    for (quint32 j=0; j < width; ++j) {
+                        data16 = (*data8 << 8) + *(data8 + 1);
+                        result.setPixel(j, i, qRgb(quint8(data16 * scale),
+                                                   quint8(data16 * scale),
+                                                   quint8(data16 * scale)));
+                        data8 += 2;
+                    }
+                }
+                *image = result;
+            }
+                break;
+            case 2: /* graycale with alpha channel */
+            {
+                quint16 data16, alpha16;
+                QImage result(width, height, QImage::Format_ARGB32);
+                quint8 *data8 = (quint8*)imageData.constData();
+                quint8 *alpha8 = data8 + totalBytes * 2;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        data16 = (*data8 << 8) + *(data8 + 1);
+                        alpha16 = (*alpha8 << 8) + *(alpha8 + 1);
+                        *p = qRgba(quint8(data16 * scale),
+                                   quint8(data16 * scale),
+                                   quint8(data16 * scale),
+                                   quint8(alpha16 * scale));
+                        ++p; data8 += 2; alpha8 += 2;
+                    }
+                }
+                *image = result;
+            }
+                break;
+            default:
+                return false;
+                break;
+            }
+        }
             break;
         default:
             return false;
@@ -621,7 +668,7 @@ bool QPsdHandler::read(QImage *image)
             }
         }
             break;
-        //32-bit support still under testing
+        //32-bit support still under testing... buggy
         case 32:
         {
             const qreal scale = (qPow(2, 8) -1 ) / (qPow(2, 32) - 1);
@@ -690,7 +737,9 @@ bool QPsdHandler::read(QImage *image)
         }
     }
         break;
+    /* Mixed CMYK and Multichannel logic due to similarities*/
     case 4: /*CMYK*/
+    case 7: /*MULTICHANNEL*/
     {
         if (imageData.size() != channels * totalBytes * (depth/8))
             return false;
@@ -698,6 +747,29 @@ bool QPsdHandler::read(QImage *image)
         switch (depth) {
         case 8:
             switch (channels) {
+            /* Reference: http://help.adobe.com/en_US/photoshop/cs/using/WSfd1234e1c4b69f30ea53e41001031ab64-73eea.html#WSfd1234e1c4b69f30ea53e41001031ab64-73e5a
+             * Converting a CMYK image to Multichannel mode creates cyan, magenta, yellow, and black spot channels.
+             * Converting an RGB image to Multichannel mode creates cyan, magenta, and yellow spot channels.
+             */
+            case 3:
+            {
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *cyan = (quint8*)imageData.constData();
+                quint8 *magenta = cyan + totalBytes;
+                quint8 *yellow = magenta + totalBytes;
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        *p = QColor::fromCmyk(255 - *cyan, 255 - *magenta,
+                                              255 - *yellow, 0).rgb();
+                        ++p; ++cyan; ++magenta; ++yellow;;
+                    }
+                }
+                *image = result;
+            }
+                break;
             case 4:
             {
                 QImage result(width, height, QImage::Format_RGB32);
@@ -818,71 +890,10 @@ bool QPsdHandler::read(QImage *image)
         }
     }
         break;
-    case 7: /*MULTICHANNEL*/
-    {
-        if (imageData.size() != channels * totalBytes)
-            return false;
-
-        /* Reference: http://help.adobe.com/en_US/photoshop/cs/using/WSfd1234e1c4b69f30ea53e41001031ab64-73eea.html#WSfd1234e1c4b69f30ea53e41001031ab64-73e5a
-         * Converting a CMYK image to Multichannel mode creates cyan, magenta, yellow, and black spot channels.
-         * Converting an RGB image to Multichannel mode creates cyan, magenta, and yellow spot channels.
-         */
-        switch (depth) {
-        case 8:
-            switch (channels) {
-            case 3:
-            {
-                QImage result(width, height, QImage::Format_RGB32);
-                quint8 *cyan = (quint8*)imageData.constData();
-                quint8 *magenta = cyan + totalBytes;
-                quint8 *yellow = magenta + totalBytes;
-                QRgb  *p, *end;
-                for (quint32 y = 0; y < height; ++y) {
-                    p = (QRgb *)result.scanLine(y);
-                    end = p + width;
-                    while (p < end) {
-                        *p = QColor::fromCmyk(255 - *cyan, 255 - *magenta,
-                                              255 - *yellow, 0).rgb();
-                        ++p; ++cyan; ++magenta; ++yellow;;
-                    }
-                }
-                *image = result;
-            }
-                break;
-            case 4:
-            {
-                QImage result(width, height, QImage::Format_RGB32);
-                quint8 *cyan = (quint8*)imageData.constData();
-                quint8 *magenta = cyan + totalBytes;
-                quint8 *yellow = magenta + totalBytes;
-                quint8 *key = yellow + totalBytes;
-                QRgb  *p, *end;
-                for (quint32 y = 0; y < height; ++y) {
-                    p = (QRgb *)result.scanLine(y);
-                    end = p + width;
-                    while (p < end) {
-                        *p = QColor::fromCmyk(255 - *cyan, 255 - *magenta,
-                                              255 - *yellow, 255 - *key).rgb();
-                        ++p; ++cyan; ++magenta; ++yellow; ++key;
-                    }
-                }
-                *image = result;
-            }
-                break;
-            default:
-                return false;
-                break;
-            }
-            break;
-        default:
-            return false;
-            break;
-        }
-    }
-        break;
+     return false;
     case 8: /*DUOTONE*/
     {
-        if (imageData.size() != channels * totalBytes)
+        if (imageData.size() != channels * totalBytes * (depth/8))
             return false;
 
         switch (depth) {
@@ -928,7 +939,7 @@ bool QPsdHandler::read(QImage *image)
         break;
     case 9: /*LAB - UNDER TESTING*/
     {
-        if (imageData.size() != channels * totalBytes)
+        if (imageData.size() != channels * totalBytes * (depth/8))
             return false;
 
         switch (depth) {
@@ -966,7 +977,7 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        *p = LabaToRgb(*L, *a, *b, *alpha);
+                        *p = LabToRgb(*L, *a, *b, *alpha);
                         ++p; ++alpha; ++L; ++a; ++b;
                     }
 
@@ -978,6 +989,70 @@ bool QPsdHandler::read(QImage *image)
                 return false;
                 break;
             }
+            break;
+        case 16:
+        {
+            const qreal scale = (qPow(2, 8) -1 ) / (qPow(2, 16) - 1);
+            switch (channels) {
+            case 3:
+            {
+                quint16 lightness16, a16, b16;
+                QImage result(width, height, QImage::Format_RGB32);
+                quint8 *lightness8 = (quint8*)imageData.constData();
+                quint8 *a8 = lightness8 + totalBytes * 2;
+                quint8 *b8 = a8 + totalBytes * 2;
+
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        lightness16 = (*lightness8 << 8) + *(lightness8 + 1);
+                        a16 = (*a8 << 8) + *(a8 + 1);
+                        b16 = (*b8 << 8) + *(b8 + 1);
+                        *p = LabToRgb(quint8(lightness16 * scale),
+                                      quint8(a16 * scale),
+                                      quint8(b16 * scale));
+                        ++p; lightness8 += 2; a8 += 2; b8 += 2;
+                    }
+                }
+                *image = result;
+            }
+                break;
+            case 4:
+            {
+                quint16 lightness16, a16, b16, alpha16;
+                QImage result(width, height, QImage::Format_ARGB32);
+                quint8 *lightness8 = (quint8*)imageData.constData();
+                quint8 *a8 = lightness8 + totalBytes * 2;
+                quint8 *b8 = a8 + totalBytes * 2;
+                quint8 *alpha8 = b8 + totalBytes * 2;
+
+                QRgb  *p, *end;
+                for (quint32 y = 0; y < height; ++y) {
+                    p = (QRgb *)result.scanLine(y);
+                    end = p + width;
+                    while (p < end) {
+                        lightness16 = (*lightness8 << 8) + *(lightness8 + 1);
+                        a16 = (*a8 << 8) + *(a8 + 1);
+                        b16 = (*b8 << 8) + *(b8 + 1);
+                        alpha16 = (*alpha8 << 8) + *(alpha8 + 1);
+                        *p = LabToRgb(quint8(lightness16 * scale),
+                                      quint8(a16 * scale),
+                                      quint8(b16 * scale),
+                                      quint8(alpha16 * scale));
+                        ++p; lightness8 += 2; a8 += 2; b8 += 2; alpha8 += 2;
+                    }
+
+                }
+                *image = result;
+            }
+                break;
+            default:
+                return false;
+                break;
+            }
+        }
             break;
         default:
             return false;
