@@ -617,6 +617,7 @@ bool QPsdHandler::read(QImage *image)
         case 32:
         {
             //32 bpc (HDR)... requires tonemapping
+			return false;
         }
             break;
         default:
