@@ -257,13 +257,13 @@ bool QPsdHandler::read(QImage *image)
     quint64 totalBytesPerChannel = width * height * depth / 8;
 
     switch (compression) {
-    case 0: /*RAW IMAGE DATA - UNDER TESTING*/
+    case 0: /*RAW IMAGE DATA*/
     {
         /* NOTE: This algorithm might be inaccurate and was based ONLY
          * on a psd file I obtained (no references) */
 
         /* This code is faster than the alternative below */
-        int size = channels * totalBytesPerChannel;
+        quint64 size = channels * totalBytesPerChannel;
         imageData.resize(size);
         input.readRawData(imageData.data(), size);
         /* Alternative:
@@ -288,7 +288,6 @@ bool QPsdHandler::read(QImage *image)
 
         /* Code based on PackBits implementation which is primarily used by
          * Photoshop for RLE encoding/decoding */
-
         while (!input.atEnd()) {
             input >> byte;
             if (byte > 128) {
@@ -318,7 +317,7 @@ bool QPsdHandler::read(QImage *image)
                 delete [] temp;
                 */
                 /* This code is faster than the 2 alternatives above */
-                int size = imageData.size();
+                quint64 size = imageData.size();
                 imageData.resize(size + count);
                 input.readRawData(imageData.data() + size, count);
             }
@@ -613,11 +612,11 @@ bool QPsdHandler::read(QImage *image)
                 break;
             }
         }
-            break;
+            break;            
         case 32:
         {
             //32 bpc (HDR)... requires tonemapping
-			return false;
+            return false;
         }
             break;
         default:
