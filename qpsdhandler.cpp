@@ -121,7 +121,7 @@ bool QPsdHandler::canRead() const
         input >> signature >> version;
         if (version == 1)
             setFormat("psd");
-        else if (version == 1)
+        else if (version == 2)
             setFormat("psb");
         else return false;
         return true;
