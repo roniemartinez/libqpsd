@@ -548,7 +548,25 @@ bool QPsdHandler::read(QImage *image)
                     p = (QRgb *)result.scanLine(y);
                     end = p + width;
                     while (p < end) {
-                        *p = qRgba(*red, *green, *blue, *alpha);
+                        // Fix for blending image with white
+                        if(*alpha != 0)
+                        {
+                            quint8 r = *red;
+                            quint8 g = *green;
+                            quint8 b = *blue;
+                            quint8 a = *alpha;
+
+                            quint8 rFixed = (((r + a) - 255) * 255) / a;
+                            quint8 gFixed = (((g + a) - 255) * 255) / a;
+                            quint8 bFixed = (((b + a) - 255) * 255) / a;
+
+                            *p = qRgba(rFixed, gFixed, bFixed, a);
+                        }
+                        else
+                        {
+                            *p = qRgba(*red, *green, *blue, *alpha);
+                        }
+
                         ++p; ++red; ++green; ++blue; ++alpha;
                     }
                 }
