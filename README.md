@@ -29,9 +29,9 @@ Color Mode
 Depth
 - 1-bit - SUPPORTED (Bitmap)
 - 8-bits - SUPPORTED
-    - 16-bits - SUPPORTED
-    - 32-bits - Unsupported (Tonemapping Algorithm, needed help!)
-*16-bit depth is scaled down to 8-bits
+- 16-bits - SUPPORTED
+- 32-bits - Unsupported (Tonemapping Algorithm, needed help!)
+- *16-bit depth is scaled down to 8-bits*
 	
 
 BINARIES
@@ -56,3 +56,4 @@ LIST OF SOFTWARE USING libqpsd
 - nomacs (http://nomacs.org/)
 - EzViewer (https://github.com/yuezhao/ezviewer)
 - PhotoQt (http://photoqt.org/)
+- *for applications not included in the list, shoot me an email*
