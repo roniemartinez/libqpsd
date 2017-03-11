@@ -36,17 +36,19 @@ Depth
 
 CONTRIBUTE
 
-	If you have an existing PSD/PSB file with different color mode or compression. Feel free to send me
-	an email at ronmarti18@gmail.com
-	I need samples with zip-compressed layers (zip w/ or w/o prediction). :P
-	If you want to contribute to the code, just fork the project and pull requests.
+- If you have an existing PSD/PSB file with different color mode or compression. Feel free to send me an [email](mailto:ronmarti18@gmail.com). I need samples with zip-compressed layers (zip w/ or w/o prediction).
+- If you want to contribute to the code, just fork the project and pull requests.
+- If you want to keep this project alive you can send your donations to:
+	- Bitcoin: 3A23hHJF8q8hNPz3sedqD9T7g25ELPcvg2
 
 CONTRIBUTORS
 
-	Ronie Martinez aka Code ReaQtor (ronmarti18@gmail.com)
-	Yuezhao Huang (huangezhao@gmail.com)
-	username "asgohtals" (http://qt-project.org/member/136052) - contributed PSB files for testing: 
-		berlin-cmyk.psb, berlin-quadtone.psb & wall-small-Lab.psb
+- Ronie Martinez aka Code ReaQtor (ronmarti18@gmail.com)
+- Yuezhao Huang (huangezhao@gmail.com)
+- username "asgohtals" (http://qt-project.org/member/136052) - contributed PSB files for testing: 
+	- berlin-cmyk.psb
+	- berlin-quadtone.psb
+	- wall-small-Lab.psb
 
 LIST OF SOFTWARE USING libqpsd
 - nomacs (http://nomacs.org/)
