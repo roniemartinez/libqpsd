@@ -40,7 +40,7 @@ CONTRIBUTE
 - If you want to contribute to the code, just fork the project and pull requests.
 - If you want to keep this project alive you can send your donations to:
 	- Bitcoin: 3A23hHJF8q8hNPz3sedqD9T7g25ELPcvg2
-	- Paypal: paypal.me/RonieMartinez
+	- Paypal: https://www.paypal.me/RonieMartinez
 
 CONTRIBUTORS
 
