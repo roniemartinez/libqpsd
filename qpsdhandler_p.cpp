@@ -490,7 +490,7 @@ QImage QPsdHandler::processRGB8WithAlpha(QByteArray& imageData, quint32 width, q
 #ifdef QT_DEBUG
     qDebug() << "8-bit RGB with Alpha";
 #endif
-    QImage result(width, height, QImage::Format_RGB32);
+	QImage result(width, height, QImage::Format_ARGB32);
     quint8 *red = (quint8*)imageData.constData();
     quint8 *green = red + totalBytesPerChannel;
     quint8 *blue = green + totalBytesPerChannel;
