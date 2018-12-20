@@ -50,8 +50,6 @@ execute_process(
   OUTPUT_VARIABLE QT_PLUGINS_DIR
   OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-message(STATUS "qmake: ${QT_QMAKE_EXECUTABLE}")
-
 if (QT_PLUGINS_DIR)
 
   # status
