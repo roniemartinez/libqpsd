@@ -2,8 +2,12 @@
 
 PSD (Photoshop Document) & PSB (Photoshop Big) Plugin for Qt/C++ (Qt4/Qt5)
 
-
 This project is based on the [Adobe Photoshop File Formats Specification](http://www.adobe.com/devnet-apps/photoshop/fileformatashtml/PhotoshopFileFormats.htm)
+
+## Support
+If you like `libqpsd` or if it is useful to you, show your support by buying me a coffee.
+
+<a href="https://www.buymeacoffee.com/roniemartinez" target="_blank"><img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174"></a>
 
 ## FEATURES
 
@@ -42,8 +46,6 @@ This project is based on the [Adobe Photoshop File Formats Specification](http:/
 
 - If you have an existing PSD/PSB file with different color mode or compression. Feel free to send me an [email](mailto:ronmarti18@gmail.com). I need samples with zip-compressed layers (zip w/ or w/o prediction).
 - If you want to contribute to the code, just fork the project and pull requests.
-- If you want to keep this project alive you can send your donations to:
-    - Paypal: https://www.paypal.me/RonieMartinez
 
 ## AUTHOR
 
