@@ -1,5 +1,5 @@
 /*
-Copyright (c) 2012-2020 Ronie Martinez (ronmarti18@gmail.com)
+Copyright (c) 2012 Ronie Martinez (ronmarti18@gmail.com)
 All rights reserved.
 
 This library is free software; you can redistribute it and/or
